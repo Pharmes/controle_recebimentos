@@ -102,6 +102,8 @@ app.innerHTML = `
         </div>
       </header>
 
+      <p class="data-status" id="dataStatus" role="status" aria-live="polite" hidden></p>
+
       <section class="filters-panel" id="filtersPanel" aria-label="Filtros por filial destino e período" hidden>
         <form class="filters-grid" id="filtersForm">
           <label class="field">
@@ -271,8 +273,9 @@ const expandedColumns = {
   pendentes: false,
 };
 
-const erpRows = createMockErpRows(today);
-const formulas = normalizeErpRows(erpRows);
+let formulas = [];
+let isLoading = false;
+let dataStatusTimer = null;
 
 const columns = {
   "a-receber": document.querySelector("#col-a-receber"),
@@ -303,6 +306,7 @@ const statusIcons = {
 
 const template = document.querySelector("#formula-template");
 const totalCount = document.querySelector("#countTotal");
+const dataStatus = document.querySelector("#dataStatus");
 const filtersToggle = document.querySelector("#filtersToggle");
 const filtersPanel = document.querySelector("#filtersPanel");
 const filtersForm = document.querySelector("#filtersForm");
@@ -313,16 +317,14 @@ const exportButton = document.querySelector("#exportButton");
 const systemIcon = document.querySelector(".system-icon");
 const startDateInput = document.querySelector("#startDate");
 const endDateInput = document.querySelector("#endDate");
-
 systemIcon.addEventListener("error", () => {
   systemIcon.hidden = true;
   systemIcon.closest(".system-icon-frame")?.classList.add("is-empty");
 });
 
+populateBranchFilter();
 startDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.startOffsetDays));
 endDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
-
-populateBranchFilter();
 
 function populateBranchFilter() {
   branchSelect.innerHTML = [
@@ -333,6 +335,73 @@ function populateBranchFilter() {
   ].join("");
 
   branchSelect.value = "all";
+}
+
+function setDataStatus(state, message, { autoHide = false } = {}) {
+  window.clearTimeout(dataStatusTimer);
+  dataStatus.dataset.state = state;
+  dataStatus.textContent = message;
+  dataStatus.hidden = false;
+
+  if (autoHide) {
+    dataStatusTimer = window.setTimeout(() => {
+      dataStatus.hidden = true;
+    }, 1600);
+  }
+}
+
+async function loadRealData() {
+  if (isLoading) {
+    return;
+  }
+
+  isLoading = true;
+  setDataStatus("loading", "Sincronizando...");
+
+  const cdfild = branchSelect.value;
+  const startDate = startDateInput.value || isoToday;
+  const endDate = endDateInput.value || isoToday;
+
+  try {
+    const response = await fetch(
+      `/api/recebimento?cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Falha ao consultar API: ${response.status}`);
+    }
+
+    const payload = await response.json();
+
+    if (!payload || !Array.isArray(payload.rows)) {
+      throw new Error("Resposta inválida da API de recebimento");
+    }
+
+    formulas = normalizeErpRows(payload.rows);
+    setDataStatus("ready", "Sincronizado", { autoHide: true });
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      formulas = normalizeErpRows(createMockErpRows(today));
+      setDataStatus(
+        "fallback",
+        "API indisponível no ambiente local. Usando dados simulados enquanto a conexão real não responde.",
+      );
+    } else {
+      formulas = [];
+      setDataStatus(
+        "error",
+        "Falha ao carregar dados reais do banco. Verifique as variáveis de ambiente e a rota /api/recebimento.",
+      );
+    }
+  }
+
+  isLoading = false;
+  render();
 }
 
 function renderCard(formula) {
@@ -378,7 +447,6 @@ function renderEmptyState(column, status) {
 }
 
 function render() {
-  syncDateBounds();
   syncStageOptions();
   const filteredFormulas = getFilteredFormulas();
   const grouped = filteredFormulas.reduce(
@@ -417,45 +485,38 @@ function render() {
 }
 
 function getFilteredFormulas() {
-  const branch = branchSelect.value;
   const stage = stageSelect.value;
   const requestQuery = normalizeSearch(requestSearch.value);
 
   return formulas.filter((formula) => {
-    const branchAllowed = ALLOWED_BRANCHES.has(formula.cdfild);
-    const matchesBranch = branch === "all" || formula.cdfild === branch;
     const matchesStage = stage === "all" || formula.cdetapa === stage;
     const matchesRequest =
       requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery);
 
-    return (
-      branchAllowed &&
-      matchesBranch &&
-      matchesStage &&
-      matchesRequest &&
-      isWithinSelectedPeriod(formula.dtret)
-    );
+    return matchesStage && matchesRequest;
   });
 }
 
-function getAvailableFormulas({ ignoreBranch = false, ignoreStage = false, ignoreDate = false } = {}) {
-  const branch = ignoreBranch ? "all" : branchSelect.value;
+function getAvailableFormulas({ ignoreStage = false } = {}) {
   const stage = ignoreStage ? "all" : stageSelect.value;
   const requestQuery = normalizeSearch(requestSearch.value);
 
   return formulas.filter((formula) => {
-    if (!ALLOWED_BRANCHES.has(formula.cdfild)) {
-      return false;
-    }
-
-    const matchesBranch = branch === "all" || formula.cdfild === branch;
     const matchesStage = stage === "all" || formula.cdetapa === stage;
     const matchesRequest =
       requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery);
-    const matchesPeriod = ignoreDate ? true : isWithinSelectedPeriod(formula.dtret);
 
-    return matchesBranch && matchesStage && matchesRequest && matchesPeriod;
+    return matchesStage && matchesRequest;
   });
+}
+
+function normalizeDateRangeInputs() {
+  const start = startDateInput.value;
+  const end = endDateInput.value;
+
+  if (start && end && start > end) {
+    endDateInput.value = start;
+  }
 }
 
 function normalizeSearch(value) {
@@ -464,12 +525,6 @@ function normalizeSearch(value) {
     .toLocaleLowerCase("pt-BR")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-}
-
-function isWithinSelectedPeriod(dateValue) {
-  const start = startDateInput.value || isoToday;
-  const end = endDateInput.value || isoToday;
-  return dateValue >= start && dateValue <= end;
 }
 
 function syncStageOptions() {
@@ -497,35 +552,6 @@ function syncStageOptions() {
   stageSelect.innerHTML = stageOptions.join("");
   if (![...stageSelect.options].some((option) => option.value === currentValue)) {
     stageSelect.value = "all";
-  }
-}
-
-function syncDateBounds() {
-  const dateSource = getAvailableFormulas({ ignoreDate: true });
-  if (dateSource.length === 0) {
-    return;
-  }
-
-  const dates = dateSource.map((formula) => formula.dtret).sort();
-  const minDate = dates[0];
-  const maxDate = dates[dates.length - 1];
-
-  startDateInput.min = minDate;
-  startDateInput.max = maxDate;
-  endDateInput.min = minDate;
-  endDateInput.max = maxDate;
-
-  if (!startDateInput.value || startDateInput.value < minDate) {
-    startDateInput.value = minDate;
-  }
-
-  if (!endDateInput.value || endDateInput.value > maxDate) {
-    endDateInput.value = maxDate;
-  }
-
-  if (startDateInput.value > endDateInput.value) {
-    startDateInput.value = minDate;
-    endDateInput.value = maxDate;
   }
 }
 
@@ -569,16 +595,36 @@ filtersForm.addEventListener("submit", (event) => {
   Object.keys(expandedColumns).forEach((status) => {
     expandedColumns[status] = false;
   });
+  normalizeDateRangeInputs();
+  loadRealData();
+});
+
+startDateInput.addEventListener("change", () => {
+  normalizeDateRangeInputs();
+  loadRealData();
+});
+
+endDateInput.addEventListener("change", () => {
+  normalizeDateRangeInputs();
+  loadRealData();
+});
+
+branchSelect.addEventListener("change", () => {
+  loadRealData();
+});
+
+stageSelect.addEventListener("input", () => {
+  render();
+});
+stageSelect.addEventListener("change", () => {
   render();
 });
 
-[startDateInput, endDateInput, branchSelect, stageSelect, requestSearch].forEach((input) => {
-  input.addEventListener("input", () => {
-    render();
-  });
-  input.addEventListener("change", () => {
-    render();
-  });
+requestSearch.addEventListener("input", () => {
+  render();
+});
+requestSearch.addEventListener("change", () => {
+  render();
 });
 
 document.querySelectorAll(".column-footer").forEach((button) => {
@@ -625,3 +671,4 @@ exportButton.addEventListener("click", () => {
 });
 
 render();
+loadRealData();

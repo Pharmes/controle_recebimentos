@@ -25,21 +25,26 @@ INNER JOIN
     AND p.cdfil  = v.cdfil
     AND p.serier = v.serier
 WHERE 1=1
-    AND v.dtret BETWEEN current_date - 1 AND current_date + 5
+    AND v.dtret BETWEEN {startDate} AND {endDate}
     AND v.cdfild IN (12)
     AND p.cdetapa IN ('08','10');
 `.trim();
 
-export function buildRecebimentoErpQuery(cdfilds = [DEFAULT_CDFILD]) {
+export function buildRecebimentoErpQuery(
+  cdfilds = [DEFAULT_CDFILD],
+  { startDate, endDate } = {},
+) {
   const branchList = cdfilds
     .map((cdfild) => Number.parseInt(cdfild, 10))
     .filter((cdfild) => Number.isFinite(cdfild))
     .join(", ");
 
-  return RECEBIMENTO_ERP_QUERY.replace(
-    "AND v.cdfild IN (12)",
-    `AND v.cdfild IN (${branchList || DEFAULT_CDFILD})`,
-  );
+  const rangeStart = startDate ? toFirebirdDateLiteral(startDate) : "current_date - 1";
+  const rangeEnd = endDate ? toFirebirdDateLiteral(endDate) : "current_date + 5";
+
+  return RECEBIMENTO_ERP_QUERY.replace("{startDate}", rangeStart)
+    .replace("{endDate}", rangeEnd)
+    .replace("AND v.cdfild IN (12)", `AND v.cdfild IN (${branchList || DEFAULT_CDFILD})`);
 }
 
 const STATUS_BY_STEP_OPERATION = {
@@ -233,4 +238,8 @@ function normalizeTime(value) {
   }
 
   return text;
+}
+
+function toFirebirdDateLiteral(value) {
+  return `CAST('${normalizeDate(value)}' AS DATE)`;
 }
