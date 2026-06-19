@@ -3,9 +3,13 @@ KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRid2
 
 
 ERP:
-LOCAL: 192.168.1.128:3050
+HOST: pharmesjf2.ddns.net
+PORTA: 3050
 
-WEB: pharmesjf2.ddns:3050
+LOCAL: pharmesjf2.ddns.net:3050
+
+WEB: pharmesjf2.ddns.net:3050
+VERCEL: pharmesjf2.ddns.net:3050
 
 USUARIO:
 PH_LUCA
