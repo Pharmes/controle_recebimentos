@@ -1,13 +1,18 @@
 import "./style.css";
 import logoPharmesUrl from "./img/logopharmes.png";
+import {
+  DEFAULT_CDFILD,
+  ERP_WINDOW,
+  addDays,
+  createMockErpRows,
+  formatDateInput,
+  getDestinationBranches,
+  normalizeErpRows,
+} from "./erpRecebimento.js";
 
 const app = document.querySelector("#app");
 const today = new Date();
-const isoToday = [
-  today.getFullYear(),
-  String(today.getMonth() + 1).padStart(2, "0"),
-  String(today.getDate()).padStart(2, "0"),
-].join("-");
+const isoToday = formatDateInput(today);
 
 function iconTruck() {
   return `
@@ -70,7 +75,7 @@ app.innerHTML = `
           </span>
           <div class="headline">
             <h1>Controle de Recebimento</h1>
-            <p>Controle de recebimentos na filial destino.</p>
+            <p>Monitoramento por data de retirada na filial destino.</p>
           </div>
         </div>
 
@@ -86,35 +91,33 @@ app.innerHTML = `
         </div>
       </header>
 
-      <section class="filters-panel" id="filtersPanel" aria-label="Filtros por filial e período" hidden>
+      <section class="filters-panel" id="filtersPanel" aria-label="Filtros por filial destino e período" hidden>
         <form class="filters-grid" id="filtersForm">
           <label class="field">
-            <span>Filial</span>
-            <select id="branchSelect" name="branch">
-              <option value="all" selected>Todas as filiais</option>
-              <option value="JF - Centro">JF - Centro</option>
-              <option value="Filial Juiz de Fora">Filial Juiz de Fora</option>
-              <option value="Filial Barro Preto">Filial Barro Preto</option>
-              <option value="Filial Palmeiras">Filial Palmeiras</option>
+            <span>Filial destino</span>
+            <select id="branchSelect" name="branch"></select>
+          </label>
+
+          <label class="field">
+            <span>Etapa</span>
+            <select id="stageSelect" name="stage">
+              <option value="all" selected>Logística + Balcão</option>
+              <option value="08">08 - Logística</option>
+              <option value="10">10 - Balcão</option>
             </select>
           </label>
 
           <label class="field">
-            <span>Cliente</span>
-            <input id="clientSearch" type="search" name="client" placeholder="Buscar cliente" autocomplete="off" />
-          </label>
-
-          <label class="field">
             <span>Requisição</span>
-            <input id="requestSearch" type="search" name="request" placeholder="Ex.: OR-22091" autocomplete="off" />
+            <input id="requestSearch" type="search" name="request" placeholder="Ex.: 12-22091-1" autocomplete="off" />
           </label>
 
           <label class="field">
             <span>Período</span>
             <select id="periodSelect" name="period">
-              <option value="today" selected>Hoje</option>
-              <option value="week">Semana</option>
-              <option value="month">Mês</option>
+              <option value="erp-window" selected>ERP: ontem até +5 dias</option>
+              <option value="today">Hoje</option>
+              <option value="next5">Próximos 5 dias</option>
               <option value="custom">Personalizado</option>
             </select>
           </label>
@@ -138,26 +141,26 @@ app.innerHTML = `
         <article class="summary-card summary-total">
           <span class="summary-label">Total monitorado</span>
           <strong class="summary-value" id="countTotal">0</strong>
-          <small>Fórmulas no recorte atual</small>
+          <small>Registros no recorte atual</small>
         </article>
         <article class="summary-card status-received">
           <span class="summary-label">Recebido</span>
           <strong class="summary-value" id="countRecebido">0</strong>
-          <small>Conferência concluída</small>
+          <small>cdetapa 10 + cdopera 1</small>
         </article>
         <article class="summary-card status-waiting">
           <span class="summary-label">A receber</span>
           <strong class="summary-value" id="countAReceber">0</strong>
-          <small>Entrada logística prevista</small>
+          <small>cdetapa 08 + cdopera 2</small>
         </article>
         <article class="summary-card status-pending">
           <span class="summary-label">Pendentes</span>
           <strong class="summary-value" id="countPendentes">0</strong>
-          <small>Tratativa imediata</small>
+          <small>cdetapa 08 + cdopera 1</small>
         </article>
       </section>
 
-      <section class="kanban" id="kanban" aria-label="Fórmulas por status de recebimento">
+      <section class="kanban" id="kanban" aria-label="Requisições por status de recebimento">
         <article class="column column-a-receber">
           <div class="column-head">
             <div>
@@ -221,15 +224,23 @@ app.innerHTML = `
       </div>
       <div class="formula-rows">
         <div class="formula-row">
-          <span class="formula-key">Cliente</span>
-          <span class="formula-value formula-client"></span>
+          <span class="formula-key">Entrada</span>
+          <span class="formula-value">
+            <span class="formula-entry-date"></span>
+            <span class="formula-divider">•</span>
+            <span class="formula-entry-time"></span>
+          </span>
         </div>
         <div class="formula-row">
-          <span class="formula-key">Requisição</span>
-          <span class="formula-value formula-order"></span>
+          <span class="formula-key">Retirada</span>
+          <span class="formula-value">
+            <span class="formula-withdrawal-date"></span>
+            <span class="formula-divider">•</span>
+            <span class="formula-withdrawal-time"></span>
+          </span>
         </div>
         <div class="formula-row">
-          <span class="formula-key">Filial</span>
+          <span class="formula-key">Origem</span>
           <span class="formula-value formula-origin"></span>
         </div>
         <div class="formula-row">
@@ -237,12 +248,12 @@ app.innerHTML = `
           <span class="formula-value formula-destination"></span>
         </div>
         <div class="formula-row">
-          <span class="formula-key">Agenda</span>
-          <span class="formula-value">
-            <span class="formula-date"></span>
-            <span class="formula-divider">•</span>
-            <span class="formula-time"></span>
-          </span>
+          <span class="formula-key">Etapa</span>
+          <span class="formula-value formula-stage"></span>
+        </div>
+        <div class="formula-row">
+          <span class="formula-key">Operação</span>
+          <span class="formula-value formula-operation"></span>
         </div>
       </div>
     </article>
@@ -256,68 +267,8 @@ const expandedColumns = {
   pendentes: false,
 };
 
-const formulaNames = [
-  "Cloridrato de Sertralina 50mg",
-  "Vitamina D3 + K2 cápsulas",
-  "Creme de ureia 10% com glicerina",
-  "Melatonina 3mg sublingual",
-  "Minoxidil 5% solução capilar",
-  "Magnésio quelato cápsulas",
-  "Probiótico sachê pediátrico",
-  "Coenzima Q10 100mg",
-  "Sérum niacinamida 4%",
-  "Ômega 3 concentrado",
-  "Colágeno hidrolisado",
-  "Loção calmante pós-procedimento",
-];
-
-const branchNames = [
-  "Filial Juiz de Fora",
-  "Filial Barro Preto",
-  "Filial Palmeiras",
-  "JF - Centro",
-];
-
-const clientNames = [
-  "Marina Duarte",
-  "Carlos Henrique",
-  "Ana Beatriz",
-  "Renata Alves",
-  "Paulo Roberto",
-  "Juliana Martins",
-  "Luciana Costa",
-  "Sofia Almeida",
-  "Eduardo Lima",
-  "Bianca Torres",
-  "Helena Rocha",
-  "Rafael Moreira",
-];
-
-function makeFormulas(status, statusLabel, total, startId, startOrder, hourStart) {
-  return Array.from({ length: total }, (_, index) => {
-    const sequence = startId + index;
-    const minutes = String((index * 11 + 20) % 60).padStart(2, "0");
-
-    return {
-      id: `F-${sequence}`,
-      name: formulaNames[index % formulaNames.length],
-      status,
-      statusLabel,
-      order: `OR-${startOrder + index}`,
-      clientName: clientNames[index % clientNames.length],
-      origin: branchNames[index % branchNames.length],
-      destination: "JF - Centro",
-      date: isoToday,
-      time: `${String(hourStart + (index % 7)).padStart(2, "0")}:${minutes}`,
-    };
-  });
-}
-
-const formulas = [
-  ...makeFormulas("a-receber", "A receber", 12, 10245, 22091, 8),
-  ...makeFormulas("recebido", "Recebido", 27, 10310, 22180, 9),
-  ...makeFormulas("pendentes", "Pendente", 7, 10420, 22260, 10),
-];
+const erpRows = createMockErpRows(today);
+const formulas = normalizeErpRows(erpRows);
 
 const columns = {
   "a-receber": document.querySelector("#col-a-receber"),
@@ -352,9 +303,9 @@ const filtersToggle = document.querySelector("#filtersToggle");
 const filtersPanel = document.querySelector("#filtersPanel");
 const filtersForm = document.querySelector("#filtersForm");
 const branchSelect = document.querySelector("#branchSelect");
+const stageSelect = document.querySelector("#stageSelect");
 const periodSelect = document.querySelector("#periodSelect");
 const customRange = document.querySelector("#customRange");
-const clientSearch = document.querySelector("#clientSearch");
 const requestSearch = document.querySelector("#requestSearch");
 const exportButton = document.querySelector("#exportButton");
 const systemIcon = document.querySelector(".system-icon");
@@ -364,8 +315,29 @@ systemIcon.addEventListener("error", () => {
   systemIcon.closest(".system-icon-frame")?.classList.add("is-empty");
 });
 
-document.querySelector("#startDate").value = isoToday;
-document.querySelector("#endDate").value = isoToday;
+document.querySelector("#startDate").value = formatDateInput(
+  addDays(today, ERP_WINDOW.startOffsetDays),
+);
+document.querySelector("#endDate").value = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
+
+populateBranchFilter();
+
+function populateBranchFilter() {
+  const branches = getDestinationBranches(formulas);
+  const options = branches.map((branch) => {
+    const selected = branch === DEFAULT_CDFILD ? " selected" : "";
+    return `<option value="${branch}"${selected}>Filial destino ${branch}</option>`;
+  });
+
+  if (!branches.includes(DEFAULT_CDFILD)) {
+    options.unshift(
+      `<option value="${DEFAULT_CDFILD}" selected>Filial destino ${DEFAULT_CDFILD}</option>`,
+    );
+  }
+
+  options.push('<option value="all">Todas as filiais destino</option>');
+  branchSelect.innerHTML = options.join("");
+}
 
 function renderCard(formula) {
   const node = template.content.cloneNode(true);
@@ -377,13 +349,15 @@ function renderCard(formula) {
   icon.innerHTML = statusIcons[formula.status]();
   icon.classList.add(`icon-${formula.status}`);
   node.querySelector(".formula-meta").textContent = formula.id;
-  node.querySelector(".formula-title").textContent = formula.name;
-  node.querySelector(".formula-client").textContent = formula.clientName;
-  node.querySelector(".formula-order").textContent = formula.order;
+  node.querySelector(".formula-title").textContent = formula.title;
+  node.querySelector(".formula-entry-date").textContent = formatDisplayDate(formula.dtentr);
+  node.querySelector(".formula-entry-time").textContent = formula.hrcad || "--:--";
+  node.querySelector(".formula-withdrawal-date").textContent = formatDisplayDate(formula.dtret);
+  node.querySelector(".formula-withdrawal-time").textContent = formula.hrret || "--:--";
   node.querySelector(".formula-origin").textContent = formula.origin;
   node.querySelector(".formula-destination").textContent = formula.destination;
-  node.querySelector(".formula-date").textContent = formula.date;
-  node.querySelector(".formula-time").textContent = formula.time;
+  node.querySelector(".formula-stage").textContent = formula.stepLabel;
+  node.querySelector(".formula-operation").textContent = formula.operationLabel;
 
   chip.textContent = formula.statusLabel;
   chip.classList.add(
@@ -403,7 +377,7 @@ function renderEmptyState(column, status) {
   empty.textContent =
     status === "pendentes"
       ? "Nenhuma pendência no recorte atual."
-      : "Nenhuma fórmula encontrada para esta etapa.";
+      : "Nenhuma requisição encontrada para esta etapa.";
   column.appendChild(empty);
 }
 
@@ -446,17 +420,16 @@ function render() {
 
 function getFilteredFormulas() {
   const branch = branchSelect.value;
-  const clientQuery = normalizeSearch(clientSearch.value);
+  const stage = stageSelect.value;
   const requestQuery = normalizeSearch(requestSearch.value);
 
   return formulas.filter((formula) => {
-    const matchesBranch = branch === "all" || formula.origin === branch;
-    const matchesClient =
-      clientQuery === "" || normalizeSearch(formula.clientName).includes(clientQuery);
+    const matchesBranch = branch === "all" || formula.cdfild === branch;
+    const matchesStage = stage === "all" || formula.cdetapa === stage;
     const matchesRequest =
-      requestQuery === "" || normalizeSearch(formula.order).includes(requestQuery);
+      requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery);
 
-    return matchesBranch && matchesClient && matchesRequest && isWithinSelectedPeriod(formula.date);
+    return matchesBranch && matchesStage && matchesRequest && isWithinSelectedPeriod(formula.dtret);
   });
 }
 
@@ -469,23 +442,21 @@ function normalizeSearch(value) {
 }
 
 function isWithinSelectedPeriod(dateValue) {
-  const formulaDate = new Date(`${dateValue}T00:00:00`);
   const todayDate = new Date(`${isoToday}T00:00:00`);
+
+  if (periodSelect.value === "erp-window") {
+    const start = formatDateInput(addDays(todayDate, ERP_WINDOW.startOffsetDays));
+    const end = formatDateInput(addDays(todayDate, ERP_WINDOW.endOffsetDays));
+    return dateValue >= start && dateValue <= end;
+  }
 
   if (periodSelect.value === "today") {
     return dateValue === isoToday;
   }
 
-  if (periodSelect.value === "week") {
-    const daysAgo = (todayDate - formulaDate) / 86400000;
-    return daysAgo >= 0 && daysAgo <= 6;
-  }
-
-  if (periodSelect.value === "month") {
-    return (
-      formulaDate.getFullYear() === todayDate.getFullYear() &&
-      formulaDate.getMonth() === todayDate.getMonth()
-    );
+  if (periodSelect.value === "next5") {
+    const end = formatDateInput(addDays(todayDate, ERP_WINDOW.endOffsetDays));
+    return dateValue >= isoToday && dateValue <= end;
   }
 
   if (periodSelect.value === "custom") {
@@ -495,6 +466,20 @@ function isWithinSelectedPeriod(dateValue) {
   }
 
   return true;
+}
+
+function formatDisplayDate(dateValue) {
+  if (!dateValue) {
+    return "--/--/----";
+  }
+
+  const [year, month, day] = dateValue.split("-");
+
+  if (!year || !month || !day) {
+    return dateValue;
+  }
+
+  return `${day}/${month}/${year}`;
 }
 
 function updateColumnFooter(status, total) {
@@ -540,13 +525,17 @@ document.querySelectorAll(".column-footer").forEach((button) => {
 
 exportButton.addEventListener("click", () => {
   const payload = getFilteredFormulas().map((formula) => ({
-    codigo: formula.id,
-    formula: formula.name,
-    cliente: formula.clientName,
-    filial: formula.origin,
-    destino: formula.destination,
-    data: formula.date,
-    horario: formula.time,
+    cdfil: formula.cdfil,
+    nrrqu: formula.nrrqu,
+    serier: formula.serier,
+    requisicao: formula.request,
+    dtentr: formula.dtentr,
+    hrcad: formula.hrcad,
+    dtret: formula.dtret,
+    hrret: formula.hrret,
+    cdfild: formula.cdfild,
+    cdetapa: formula.cdetapa,
+    cdopera: formula.cdopera,
     status: formula.statusLabel,
   }));
 
