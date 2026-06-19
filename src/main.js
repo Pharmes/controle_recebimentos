@@ -24,6 +24,7 @@ const FILIAL_LABELS = {
   20: "Manoel Honorio",
 };
 const ALLOWED_BRANCHES = new Set(Object.keys(FILIAL_LABELS));
+const numberFormatter = new Intl.NumberFormat("pt-BR");
 
 function iconTruck() {
   return `
@@ -220,15 +221,16 @@ app.innerHTML = `
 
   <template id="formula-template">
     <article class="formula-card">
-      <div class="formula-top">
+      <button class="formula-top" type="button" aria-expanded="false">
         <span class="formula-icon" aria-hidden="true"></span>
         <div class="formula-heading">
           <p class="formula-meta"></p>
           <h4 class="formula-title"></h4>
         </div>
         <span class="status-chip"></span>
-      </div>
-      <div class="formula-rows">
+        <span class="formula-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="formula-rows" hidden>
         <div class="formula-row">
           <span class="formula-key">Entrada</span>
           <span class="formula-value">
@@ -407,10 +409,13 @@ async function loadRealData() {
 function renderCard(formula) {
   const node = template.content.cloneNode(true);
   const card = node.querySelector(".formula-card");
+  const toggle = node.querySelector(".formula-top");
+  const details = node.querySelector(".formula-rows");
   const icon = node.querySelector(".formula-icon");
   const chip = node.querySelector(".status-chip");
 
   card.dataset.status = formula.status;
+  toggle.setAttribute("aria-label", `Expandir requisicao ${formula.request}`);
   icon.innerHTML = statusIcons[formula.status]();
   icon.classList.add(`icon-${formula.status}`);
   node.querySelector(".formula-meta").textContent = `Requisição ${formula.request}`;
@@ -419,8 +424,8 @@ function renderCard(formula) {
   node.querySelector(".formula-entry-time").textContent = formula.hrcad || "--:--";
   node.querySelector(".formula-withdrawal-date").textContent = formatDisplayDate(formula.dtret);
   node.querySelector(".formula-withdrawal-time").textContent = formula.hrret || "--:--";
-  node.querySelector(".formula-origin").textContent = formula.origin;
-  node.querySelector(".formula-destination").textContent = formula.destination;
+  node.querySelector(".formula-origin").textContent = formatBranch("Origem", formula.cdfil);
+  node.querySelector(".formula-destination").textContent = formatBranch("Destino", formula.cdfild);
   node.querySelector(".formula-stage").textContent = formula.stepLabel;
   node.querySelector(".formula-operation").textContent = formula.operationLabel;
 
@@ -432,6 +437,17 @@ function renderCard(formula) {
         ? "badge-success"
         : "badge-danger",
   );
+  toggle.addEventListener("click", () => {
+    const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+
+    toggle.setAttribute("aria-expanded", String(!isExpanded));
+    toggle.setAttribute(
+      "aria-label",
+      `${isExpanded ? "Expandir" : "Fechar"} requisicao ${formula.request}`,
+    );
+    details.hidden = isExpanded;
+    card.classList.toggle("is-expanded", !isExpanded);
+  });
 
   return node;
 }
@@ -467,8 +483,8 @@ function render() {
       ? formulasByStatus
       : formulasByStatus.slice(0, collapsedLimit);
 
-    statusMeta[status].metric.textContent = grouped[status];
-    statusMeta[status].badge.textContent = grouped[status];
+    statusMeta[status].metric.textContent = formatNumber(grouped[status]);
+    statusMeta[status].badge.textContent = formatNumber(grouped[status]);
 
     if (visibleFormulas.length === 0) {
       renderEmptyState(column, status);
@@ -481,7 +497,7 @@ function render() {
     updateColumnFooter(status, formulasByStatus.length);
   });
 
-  totalCount.textContent = filteredFormulas.length;
+  totalCount.textContent = formatNumber(filteredFormulas.length);
 }
 
 function getFilteredFormulas() {
@@ -560,13 +576,24 @@ function formatDisplayDate(dateValue) {
     return "--/--/----";
   }
 
-  const [year, month, day] = dateValue.split("-");
+  const [year, month, day] = String(dateValue).slice(0, 10).split("-");
 
   if (!year || !month || !day) {
     return dateValue;
   }
 
   return `${day}/${month}/${year}`;
+}
+
+function formatNumber(value) {
+  return numberFormatter.format(value);
+}
+
+function formatBranch(label, branch) {
+  const code = String(branch ?? "").trim();
+  const branchName = FILIAL_LABELS[code];
+
+  return branchName ? `${label} ${code} - ${branchName}` : `${label} ${code || "--"}`;
 }
 
 function updateColumnFooter(status, total) {
@@ -580,8 +607,8 @@ function updateColumnFooter(status, total) {
     ? "Mostrar menos"
     : "Ver todos";
   button.querySelector(".column-footer-count").textContent = isExpanded
-    ? `(${total})`
-    : `(+${remaining})`;
+    ? `(${formatNumber(total)})`
+    : `(+${formatNumber(remaining)})`;
 }
 
 filtersToggle.addEventListener("click", () => {

@@ -624,7 +624,8 @@ p {
 }
 
 .formula-card {
-  padding: 9px;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   border-radius: 8px;
   background: var(--card);
@@ -642,11 +643,29 @@ p {
   transform: translateY(-1px);
 }
 
+.formula-card.is-expanded {
+  border-color: color-mix(in srgb, var(--secondary) 28%, var(--border));
+  background: color-mix(in srgb, var(--card) 88%, var(--muted));
+}
+
 .formula-top {
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: flex-start;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: 8px;
+}
+
+.formula-top:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 70%, var(--foreground));
+  outline-offset: -2px;
 }
 
 .formula-icon {
@@ -683,29 +702,43 @@ p {
 
 .formula-meta {
   margin: 0;
-  color: color-mix(in srgb, var(--foreground) 58%, transparent);
-  font-size: 0.62rem;
+  color: color-mix(in srgb, var(--foreground) 82%, transparent);
+  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .formula-title {
   font-family: "Montserrat", sans-serif;
-  font-size: 0.8rem;
-  font-weight: 800;
+  color: color-mix(in srgb, var(--foreground) 78%, transparent);
+  font-size: 0.76rem;
+  font-weight: 700;
   line-height: 1.25;
 }
 
+.formula-chevron {
+  color: color-mix(in srgb, var(--foreground) 54%, transparent);
+  font-size: 1.15rem;
+  line-height: 1;
+  transition: transform var(--motion-hover);
+}
+
+.formula-top[aria-expanded="true"] .formula-chevron {
+  transform: rotate(90deg);
+}
+
 .formula-rows {
-  margin-top: 8px;
+  margin: 0 10px 10px;
+  padding-top: 9px;
+  border-top: 1px solid color-mix(in srgb, var(--foreground) 12%, var(--border));
   display: grid;
-  gap: 5px;
+  gap: 8px;
 }
 
 .formula-row {
   display: grid;
-  grid-template-columns: minmax(68px, 0.65fr) minmax(0, 1fr);
-  gap: 7px;
+  grid-template-columns: minmax(74px, 0.54fr) minmax(0, 1fr);
+  gap: 12px;
   align-items: baseline;
   font-size: 0.72rem;
 }
@@ -853,11 +886,11 @@ p {
   }
 
   .formula-top {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
   }
 
   .status-chip {
-    grid-column: 2;
+    grid-column: auto;
     width: fit-content;
   }
 }
