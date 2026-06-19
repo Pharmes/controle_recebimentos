@@ -13,6 +13,17 @@ import {
 const app = document.querySelector("#app");
 const today = new Date();
 const isoToday = formatDateInput(today);
+const FILIAL_LABELS = {
+  1: "Constança Valadares",
+  2: "Santa Rita",
+  7: "Tres Rios",
+  8: "Botafogo",
+  9: "Tijuca",
+  12: "Niteroi Centro",
+  13: "Niteroi Icarai",
+  20: "Manoel Honorio",
+};
+const ALLOWED_BRANCHES = new Set(Object.keys(FILIAL_LABELS));
 
 function iconTruck() {
   return `
@@ -101,7 +112,7 @@ app.innerHTML = `
           <label class="field">
             <span>Etapa</span>
             <select id="stageSelect" name="stage">
-              <option value="all" selected>Logística + Balcão</option>
+              <option value="all" selected>Todos</option>
               <option value="08">08 - Logística</option>
               <option value="10">10 - Balcão</option>
             </select>
@@ -112,25 +123,18 @@ app.innerHTML = `
             <input id="requestSearch" type="search" name="request" placeholder="Ex.: 12-22091-1" autocomplete="off" />
           </label>
 
-          <label class="field">
-            <span>Período</span>
-            <select id="periodSelect" name="period">
-              <option value="erp-window" selected>ERP: ontem até +5 dias</option>
-              <option value="today">Hoje</option>
-              <option value="next5">Próximos 5 dias</option>
-              <option value="custom">Personalizado</option>
-            </select>
-          </label>
-
-          <div class="field-range" id="customRange" hidden>
-            <label class="field">
-              <span>Início</span>
-              <input id="startDate" type="date" />
-            </label>
-            <label class="field">
-              <span>Fim</span>
-              <input id="endDate" type="date" />
-            </label>
+          <div class="field field-calendar">
+            <span>Calendário</span>
+            <div class="field-range field-range-calendar">
+              <label class="field">
+                <span>Início</span>
+                <input id="startDate" type="date" />
+              </label>
+              <label class="field">
+                <span>Fim</span>
+                <input id="endDate" type="date" />
+              </label>
+            </div>
           </div>
 
           <button class="btn btn-secondary filters-apply" type="submit">Aplicar</button>
@@ -304,39 +308,31 @@ const filtersPanel = document.querySelector("#filtersPanel");
 const filtersForm = document.querySelector("#filtersForm");
 const branchSelect = document.querySelector("#branchSelect");
 const stageSelect = document.querySelector("#stageSelect");
-const periodSelect = document.querySelector("#periodSelect");
-const customRange = document.querySelector("#customRange");
 const requestSearch = document.querySelector("#requestSearch");
 const exportButton = document.querySelector("#exportButton");
 const systemIcon = document.querySelector(".system-icon");
+const startDateInput = document.querySelector("#startDate");
+const endDateInput = document.querySelector("#endDate");
 
 systemIcon.addEventListener("error", () => {
   systemIcon.hidden = true;
   systemIcon.closest(".system-icon-frame")?.classList.add("is-empty");
 });
 
-document.querySelector("#startDate").value = formatDateInput(
-  addDays(today, ERP_WINDOW.startOffsetDays),
-);
-document.querySelector("#endDate").value = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
+startDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.startOffsetDays));
+endDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
 
 populateBranchFilter();
 
 function populateBranchFilter() {
-  const branches = getDestinationBranches(formulas);
-  const options = branches.map((branch) => {
-    const selected = branch === DEFAULT_CDFILD ? " selected" : "";
-    return `<option value="${branch}"${selected}>Filial destino ${branch}</option>`;
-  });
+  branchSelect.innerHTML = [
+    '<option value="all">Todas as filiais</option>',
+    ...Array.from(ALLOWED_BRANCHES)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((branch) => `<option value="${branch}">${branch} - ${FILIAL_LABELS[branch]}</option>`),
+  ].join("");
 
-  if (!branches.includes(DEFAULT_CDFILD)) {
-    options.unshift(
-      `<option value="${DEFAULT_CDFILD}" selected>Filial destino ${DEFAULT_CDFILD}</option>`,
-    );
-  }
-
-  options.push('<option value="all">Todas as filiais destino</option>');
-  branchSelect.innerHTML = options.join("");
+  branchSelect.value = "all";
 }
 
 function renderCard(formula) {
@@ -382,6 +378,8 @@ function renderEmptyState(column, status) {
 }
 
 function render() {
+  syncDateBounds();
+  syncStageOptions();
   const filteredFormulas = getFilteredFormulas();
   const grouped = filteredFormulas.reduce(
     (acc, formula) => {
@@ -424,12 +422,39 @@ function getFilteredFormulas() {
   const requestQuery = normalizeSearch(requestSearch.value);
 
   return formulas.filter((formula) => {
+    const branchAllowed = ALLOWED_BRANCHES.has(formula.cdfild);
     const matchesBranch = branch === "all" || formula.cdfild === branch;
     const matchesStage = stage === "all" || formula.cdetapa === stage;
     const matchesRequest =
       requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery);
 
-    return matchesBranch && matchesStage && matchesRequest && isWithinSelectedPeriod(formula.dtret);
+    return (
+      branchAllowed &&
+      matchesBranch &&
+      matchesStage &&
+      matchesRequest &&
+      isWithinSelectedPeriod(formula.dtret)
+    );
+  });
+}
+
+function getAvailableFormulas({ ignoreBranch = false, ignoreStage = false, ignoreDate = false } = {}) {
+  const branch = ignoreBranch ? "all" : branchSelect.value;
+  const stage = ignoreStage ? "all" : stageSelect.value;
+  const requestQuery = normalizeSearch(requestSearch.value);
+
+  return formulas.filter((formula) => {
+    if (!ALLOWED_BRANCHES.has(formula.cdfild)) {
+      return false;
+    }
+
+    const matchesBranch = branch === "all" || formula.cdfild === branch;
+    const matchesStage = stage === "all" || formula.cdetapa === stage;
+    const matchesRequest =
+      requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery);
+    const matchesPeriod = ignoreDate ? true : isWithinSelectedPeriod(formula.dtret);
+
+    return matchesBranch && matchesStage && matchesRequest && matchesPeriod;
   });
 }
 
@@ -442,30 +467,66 @@ function normalizeSearch(value) {
 }
 
 function isWithinSelectedPeriod(dateValue) {
-  const todayDate = new Date(`${isoToday}T00:00:00`);
+  const start = startDateInput.value || isoToday;
+  const end = endDateInput.value || isoToday;
+  return dateValue >= start && dateValue <= end;
+}
 
-  if (periodSelect.value === "erp-window") {
-    const start = formatDateInput(addDays(todayDate, ERP_WINDOW.startOffsetDays));
-    const end = formatDateInput(addDays(todayDate, ERP_WINDOW.endOffsetDays));
-    return dateValue >= start && dateValue <= end;
+function syncStageOptions() {
+  const stageSource = getAvailableFormulas({ ignoreStage: true });
+  const availableStages = new Set(stageSource.map((formula) => formula.cdetapa));
+  const currentValue = stageSelect.value || "all";
+
+  const stageOptions = [
+    `<option value="all"${currentValue === "all" ? " selected" : ""}>Todos</option>`,
+    `<option value="08"${currentValue === "08" ? " selected" : ""}>08 - Logística</option>`,
+    `<option value="10"${currentValue === "10" ? " selected" : ""}>10 - Balcão</option>`,
+  ].filter((option) => {
+    if (option.includes('value="all"')) {
+      return true;
+    }
+    if (option.includes('value="08"')) {
+      return availableStages.has("08");
+    }
+    if (option.includes('value="10"')) {
+      return availableStages.has("10");
+    }
+    return true;
+  });
+
+  stageSelect.innerHTML = stageOptions.join("");
+  if (![...stageSelect.options].some((option) => option.value === currentValue)) {
+    stageSelect.value = "all";
+  }
+}
+
+function syncDateBounds() {
+  const dateSource = getAvailableFormulas({ ignoreDate: true });
+  if (dateSource.length === 0) {
+    return;
   }
 
-  if (periodSelect.value === "today") {
-    return dateValue === isoToday;
+  const dates = dateSource.map((formula) => formula.dtret).sort();
+  const minDate = dates[0];
+  const maxDate = dates[dates.length - 1];
+
+  startDateInput.min = minDate;
+  startDateInput.max = maxDate;
+  endDateInput.min = minDate;
+  endDateInput.max = maxDate;
+
+  if (!startDateInput.value || startDateInput.value < minDate) {
+    startDateInput.value = minDate;
   }
 
-  if (periodSelect.value === "next5") {
-    const end = formatDateInput(addDays(todayDate, ERP_WINDOW.endOffsetDays));
-    return dateValue >= isoToday && dateValue <= end;
+  if (!endDateInput.value || endDateInput.value > maxDate) {
+    endDateInput.value = maxDate;
   }
 
-  if (periodSelect.value === "custom") {
-    const start = document.querySelector("#startDate").value || isoToday;
-    const end = document.querySelector("#endDate").value || isoToday;
-    return dateValue >= start && dateValue <= end;
+  if (startDateInput.value > endDateInput.value) {
+    startDateInput.value = minDate;
+    endDateInput.value = maxDate;
   }
-
-  return true;
 }
 
 function formatDisplayDate(dateValue) {
@@ -503,16 +564,21 @@ filtersToggle.addEventListener("click", () => {
   filtersToggle.setAttribute("aria-expanded", String(shouldOpen));
 });
 
-periodSelect.addEventListener("change", () => {
-  customRange.hidden = periodSelect.value !== "custom";
-});
-
 filtersForm.addEventListener("submit", (event) => {
   event.preventDefault();
   Object.keys(expandedColumns).forEach((status) => {
     expandedColumns[status] = false;
   });
   render();
+});
+
+[startDateInput, endDateInput, branchSelect, stageSelect, requestSearch].forEach((input) => {
+  input.addEventListener("input", () => {
+    render();
+  });
+  input.addEventListener("change", () => {
+    render();
+  });
 });
 
 document.querySelectorAll(".column-footer").forEach((button) => {

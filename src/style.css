@@ -299,7 +299,6 @@ p {
     minmax(150px, 1fr)
     minmax(170px, 1.08fr)
     minmax(150px, 1fr)
-    minmax(132px, 0.86fr)
     minmax(250px, 1.38fr)
     auto;
   gap: 10px;
@@ -345,12 +344,29 @@ p {
 .field-range {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 16px;
+  min-width: 0;
+}
+
+.field-calendar {
+  display: grid;
+  gap: 6px;
+}
+
+.field-range-calendar {
+  margin-top: 0;
 }
 
 .filters-apply {
   align-self: end;
+  justify-self: start;
+  width: fit-content;
+  min-width: 104px;
   white-space: nowrap;
+  min-height: 40px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.82rem;
+  border-radius: 8px;
 }
 
 .summary-grid {
@@ -746,6 +762,15 @@ p {
   .field-range {
     grid-template-columns: 1fr;
   }
+
+  .field-range-calendar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-calendar,
+  .filters-apply {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 760px) {
@@ -782,6 +807,14 @@ p {
   .summary-grid,
   .filters-grid {
     grid-template-columns: 1fr;
+  }
+
+  .field-range-calendar {
+    grid-template-columns: 1fr;
+  }
+
+  .filters-apply {
+    width: 100%;
   }
 
   .summary-card {
