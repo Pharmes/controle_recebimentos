@@ -201,7 +201,9 @@ function normalizeStep(value) {
 }
 
 function normalizeOperation(value) {
-  return normalizeCode(value);
+  const operation = Number.parseInt(normalizeCode(value), 10);
+
+  return Number.isFinite(operation) ? String(operation) : normalizeCode(value);
 }
 
 function normalizeDate(value) {
