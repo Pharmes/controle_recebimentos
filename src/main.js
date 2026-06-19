@@ -146,17 +146,17 @@ app.innerHTML = `
         <article class="summary-card status-received">
           <span class="summary-label">Recebido</span>
           <strong class="summary-value" id="countRecebido">0</strong>
-          <small>cdetapa 10 + cdopera 1</small>
+          <small>Registro confirmado no balcão</small>
         </article>
         <article class="summary-card status-waiting">
           <span class="summary-label">A receber</span>
           <strong class="summary-value" id="countAReceber">0</strong>
-          <small>cdetapa 08 + cdopera 2</small>
+          <small>Saída da logística</small>
         </article>
         <article class="summary-card status-pending">
           <span class="summary-label">Pendentes</span>
           <strong class="summary-value" id="countPendentes">0</strong>
-          <small>cdetapa 08 + cdopera 1</small>
+          <small>Entrada na logística</small>
         </article>
       </section>
 
@@ -348,7 +348,7 @@ function renderCard(formula) {
   card.dataset.status = formula.status;
   icon.innerHTML = statusIcons[formula.status]();
   icon.classList.add(`icon-${formula.status}`);
-  node.querySelector(".formula-meta").textContent = formula.id;
+  node.querySelector(".formula-meta").textContent = `Requisição ${formula.request}`;
   node.querySelector(".formula-title").textContent = formula.title;
   node.querySelector(".formula-entry-date").textContent = formatDisplayDate(formula.dtentr);
   node.querySelector(".formula-entry-time").textContent = formula.hrcad || "--:--";
@@ -528,6 +528,7 @@ exportButton.addEventListener("click", () => {
     cdfil: formula.cdfil,
     nrrqu: formula.nrrqu,
     serier: formula.serier,
+    nomepa: formula.nomepa,
     requisicao: formula.request,
     dtentr: formula.dtentr,
     hrcad: formula.hrcad,

@@ -10,6 +10,7 @@ SELECT
     v.cdfil,
     v.nrrqu,
     v.serier,
+    v.nomepa,
     v.dtentr,
     v.hrcad,
     v.dtret,
@@ -87,28 +88,41 @@ export function getDestinationBranches(rows) {
 
 export function createMockErpRows(referenceDate = new Date()) {
   const rows = [
-    ["12", "22091", "1", -2, "08:20", 0, "10:40", "12", "08", 2],
-    ["12", "22092", "1", -1, "09:10", 0, "11:25", "12", "08", 1],
-    ["12", "22093", "2", -1, "10:30", 1, "12:10", "12", "10", 1],
-    ["7", "22094", "1", 0, "08:45", 1, "13:20", "12", "08", 2],
-    ["7", "22095", "1", 0, "11:15", 2, "09:30", "12", "08", 1],
-    ["8", "22096", "1", 0, "13:35", 2, "15:00", "12", "10", 1],
-    ["8", "22097", "2", 1, "09:50", 3, "10:30", "12", "08", 2],
-    ["9", "22098", "1", 1, "12:05", 3, "14:45", "12", "08", 2],
-    ["9", "22099", "1", 1, "14:10", 4, "16:15", "12", "08", 1],
-    ["10", "22100", "1", 2, "08:25", 4, "09:55", "12", "10", 1],
-    ["10", "22101", "2", 2, "10:40", 5, "11:40", "12", "08", 2],
-    ["11", "22102", "1", 3, "15:20", 5, "17:00", "12", "08", 1],
-    ["11", "22103", "1", 3, "09:05", 5, "13:35", "14", "08", 2],
-    ["12", "22104", "2", 4, "11:55", 5, "15:25", "14", "10", 1],
-    ["13", "22105", "1", 4, "08:00", 6, "10:10", "15", "08", 1],
+    ["12", "22091", "1", "Ana Silva", -2, "08:20", 0, "10:40", "12", "08", 2],
+    ["12", "22092", "1", "Marcos Souza", -1, "09:10", 0, "11:25", "12", "08", 1],
+    ["12", "22093", "2", "Claudia Rocha", -1, "10:30", 1, "12:10", "12", "10", 1],
+    ["7", "22094", "1", "Renata Alves", 0, "08:45", 1, "13:20", "12", "08", 2],
+    ["7", "22095", "1", "Paulo Roberto", 0, "11:15", 2, "09:30", "12", "08", 1],
+    ["8", "22096", "1", "Juliana Martins", 0, "13:35", 2, "15:00", "12", "10", 1],
+    ["8", "22097", "2", "Luciana Costa", 1, "09:50", 3, "10:30", "12", "08", 2],
+    ["9", "22098", "1", "Sofia Almeida", 1, "12:05", 3, "14:45", "12", "08", 2],
+    ["9", "22099", "1", "Eduardo Lima", 1, "14:10", 4, "16:15", "12", "08", 1],
+    ["10", "22100", "1", "Bianca Torres", 2, "08:25", 4, "09:55", "12", "10", 1],
+    ["10", "22101", "2", "Helena Rocha", 2, "10:40", 5, "11:40", "12", "08", 2],
+    ["11", "22102", "1", "Rafael Moreira", 3, "15:20", 5, "17:00", "12", "08", 1],
+    ["11", "22103", "1", "Marina Duarte", 3, "09:05", 5, "13:35", "14", "08", 2],
+    ["12", "22104", "2", "Carlos Henrique", 4, "11:55", 5, "15:25", "14", "10", 1],
+    ["13", "22105", "1", "Beatriz Nunes", 4, "08:00", 6, "10:10", "15", "08", 1],
   ];
 
   return rows.map(
-    ([cdfil, nrrqu, serier, dtentrOffset, hrcad, dtretOffset, hrret, cdfild, cdetapa, cdopera]) => ({
+    ([
       cdfil,
       nrrqu,
       serier,
+      nomepa,
+      dtentrOffset,
+      hrcad,
+      dtretOffset,
+      hrret,
+      cdfild,
+      cdetapa,
+      cdopera,
+    ]) => ({
+      cdfil,
+      nrrqu,
+      serier,
+      nomepa,
       dtentr: formatDateInput(addDays(referenceDate, dtentrOffset)),
       hrcad,
       dtret: formatDateInput(addDays(referenceDate, dtretOffset)),
@@ -138,6 +152,7 @@ function normalizeErpRow(row) {
   const cdfil = normalizeCode(getField(row, "cdfil"));
   const nrrqu = normalizeCode(getField(row, "nrrqu"));
   const serier = normalizeCode(getField(row, "serier"));
+  const nomepa = normalizeCode(getField(row, "nomepa"));
   const cdfild = normalizeCode(getField(row, "cdfild"));
   const cdetapa = normalizeStep(getField(row, "cdetapa"));
   const cdopera = normalizeOperation(getField(row, "cdopera"));
@@ -147,10 +162,11 @@ function normalizeErpRow(row) {
   return {
     id: request,
     request,
-    title: `Requisicao ${request}`,
+    title: nomepa || `Requisicao ${request}`,
     cdfil,
     nrrqu,
     serier,
+    nomepa,
     dtentr: normalizeDate(getField(row, "dtentr")),
     hrcad: normalizeTime(getField(row, "hrcad")),
     dtret: normalizeDate(getField(row, "dtret")),
