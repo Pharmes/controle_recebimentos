@@ -1,4 +1,5 @@
 import "./style.css";
+import logoPharmesUrl from "./img/logopharmes.png";
 
 const app = document.querySelector("#app");
 const today = new Date();
@@ -22,7 +23,7 @@ function iconTruck() {
 function iconCheck() {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 7L10.5 16.5 4 10"></path>
+      <path d="M20 7 10.5 16.5 4 10"></path>
     </svg>
   `;
 }
@@ -60,29 +61,32 @@ function iconExport() {
 }
 
 app.innerHTML = `
-  <div class="shell">
-    <main class="main">
+  <div class="app-shell">
+    <main class="workspace">
       <header class="topbar">
-        <div class="brand">
-          <div class="brand-mark">P</div>
-          <div>
-            <p class="eyebrow">PHARMES</p>
+        <div class="header-title">
+          <span class="system-icon-frame" aria-hidden="true">
+            <img class="system-icon" src="${logoPharmesUrl}" alt="" />
+          </span>
+          <div class="headline">
             <h1>Controle de Recebimento</h1>
+            <p>Controle de recebimentos na filial destino.</p>
           </div>
         </div>
-        <div class="topbar-meta">
-          <button class="btn btn-primary" id="filtersToggle" type="button" aria-expanded="false" aria-controls="filtersPanel">
+
+        <div class="topbar-actions">
+          <button class="btn btn-outline" id="filtersToggle" type="button" aria-expanded="false" aria-controls="filtersPanel">
             <span class="btn-icon">${iconFilter()}</span>
             <span>Filtros</span>
           </button>
-          <button class="btn btn-secondary" id="exportButton" type="button">
+          <button class="btn btn-primary" id="exportButton" type="button">
             <span class="btn-icon">${iconExport()}</span>
             <span>Exportar</span>
           </button>
         </div>
       </header>
 
-      <section class="filters-panel card" id="filtersPanel" aria-label="Filtros por filial e período" hidden>
+      <section class="filters-panel" id="filtersPanel" aria-label="Filtros por filial e período" hidden>
         <form class="filters-grid" id="filtersForm">
           <label class="field">
             <span>Filial</span>
@@ -96,7 +100,7 @@ app.innerHTML = `
           </label>
 
           <label class="field">
-            <span>Nome do cliente</span>
+            <span>Cliente</span>
             <input id="clientSearch" type="search" name="client" placeholder="Buscar cliente" autocomplete="off" />
           </label>
 
@@ -125,49 +129,40 @@ app.innerHTML = `
               <input id="endDate" type="date" />
             </label>
           </div>
-          <button class="btn btn-primary filters-apply" type="submit">Aplicar</button>
+
+          <button class="btn btn-secondary filters-apply" type="submit">Aplicar</button>
         </form>
       </section>
 
-      <section class="summary-grid summary-grid--digest" id="resumo" aria-label="Resumo de status">
-        <article class="metric card metric-warn">
-          <div class="metric-main">
-            <span class="metric-icon" aria-hidden="true">${iconTruck()}</span>
-            <div>
-              <span class="metric-label">A receber</span>
-              <strong class="metric-value" id="countAReceber">0</strong>
-            </div>
-          </div>
-          <p class="metric-note">Entrada logística aguardada.</p>
+      <section class="summary-grid" id="resumo" aria-label="Resumo de status">
+        <article class="summary-card summary-total">
+          <span class="summary-label">Total monitorado</span>
+          <strong class="summary-value" id="countTotal">0</strong>
+          <small>Fórmulas no recorte atual</small>
         </article>
-        <article class="metric card metric-success metric--quiet">
-          <div class="metric-main">
-            <span class="metric-icon" aria-hidden="true">${iconCheck()}</span>
-            <div>
-              <span class="metric-label">Recebido</span>
-              <strong class="metric-value" id="countRecebido">0</strong>
-            </div>
-          </div>
-          <p class="metric-note">Conferência concluída.</p>
+        <article class="summary-card status-received">
+          <span class="summary-label">Recebido</span>
+          <strong class="summary-value" id="countRecebido">0</strong>
+          <small>Conferência concluída</small>
         </article>
-        <article class="metric card metric-danger metric--compact-alert">
-          <div class="metric-main">
-            <span class="metric-icon" aria-hidden="true">${iconClock()}</span>
-            <div>
-              <span class="metric-label">Pendentes</span>
-              <strong class="metric-value" id="countPendentes">0</strong>
-            </div>
-          </div>
-          <p class="metric-note">Pendências para tratativa imediata.</p>
+        <article class="summary-card status-waiting">
+          <span class="summary-label">A receber</span>
+          <strong class="summary-value" id="countAReceber">0</strong>
+          <small>Entrada logística prevista</small>
+        </article>
+        <article class="summary-card status-pending">
+          <span class="summary-label">Pendentes</span>
+          <strong class="summary-value" id="countPendentes">0</strong>
+          <small>Tratativa imediata</small>
         </article>
       </section>
 
-      <section class="kanban" id="kanban">
-        <article class="column card column-a-receber">
+      <section class="kanban" id="kanban" aria-label="Fórmulas por status de recebimento">
+        <article class="column column-a-receber">
           <div class="column-head">
             <div>
-              <p class="column-label">Etapa 01</p>
-              <h3><span class="column-icon" aria-hidden="true">${iconTruck()}</span>A receber</h3>
+              <span class="column-icon" aria-hidden="true">${iconTruck()}</span>
+              <h3>A receber</h3>
             </div>
             <span class="badge badge-warn" id="badgeAReceber">0</span>
           </div>
@@ -179,11 +174,11 @@ app.innerHTML = `
           </button>
         </article>
 
-        <article class="column card column-recebido">
+        <article class="column column-recebido">
           <div class="column-head">
             <div>
-              <p class="column-label">Etapa 02</p>
-              <h3><span class="column-icon" aria-hidden="true">${iconCheck()}</span>Recebido</h3>
+              <span class="column-icon" aria-hidden="true">${iconCheck()}</span>
+              <h3>Recebido</h3>
             </div>
             <span class="badge badge-success" id="badgeRecebido">0</span>
           </div>
@@ -195,11 +190,11 @@ app.innerHTML = `
           </button>
         </article>
 
-        <article class="column card column-pendente">
+        <article class="column column-pendente">
           <div class="column-head">
             <div>
-              <p class="column-label">Etapa 03</p>
-              <h3><span class="column-icon" aria-hidden="true">${iconClock()}</span>Pendentes</h3>
+              <span class="column-icon" aria-hidden="true">${iconClock()}</span>
+              <h3>Pendentes</h3>
             </div>
             <span class="badge badge-danger" id="badgePendentes">0</span>
           </div>
@@ -217,9 +212,10 @@ app.innerHTML = `
   <template id="formula-template">
     <article class="formula-card">
       <div class="formula-top">
-        <div class="formula-title-wrap">
-          <h4 class="formula-title"></h4>
+        <span class="formula-icon" aria-hidden="true"></span>
+        <div class="formula-heading">
           <p class="formula-meta"></p>
+          <h4 class="formula-title"></h4>
         </div>
         <span class="status-chip"></span>
       </div>
@@ -229,7 +225,7 @@ app.innerHTML = `
           <span class="formula-value formula-client"></span>
         </div>
         <div class="formula-row">
-          <span class="formula-key">Código</span>
+          <span class="formula-key">Requisição</span>
           <span class="formula-value formula-order"></span>
         </div>
         <div class="formula-row">
@@ -237,7 +233,11 @@ app.innerHTML = `
           <span class="formula-value formula-origin"></span>
         </div>
         <div class="formula-row">
-          <span class="formula-key">Data</span>
+          <span class="formula-key">Destino</span>
+          <span class="formula-value formula-destination"></span>
+        </div>
+        <div class="formula-row">
+          <span class="formula-key">Agenda</span>
           <span class="formula-value">
             <span class="formula-date"></span>
             <span class="formula-divider">•</span>
@@ -340,21 +340,51 @@ const statusMeta = {
   },
 };
 
+const statusIcons = {
+  "a-receber": iconTruck,
+  recebido: iconCheck,
+  pendentes: iconClock,
+};
+
 const template = document.querySelector("#formula-template");
+const totalCount = document.querySelector("#countTotal");
+const filtersToggle = document.querySelector("#filtersToggle");
+const filtersPanel = document.querySelector("#filtersPanel");
+const filtersForm = document.querySelector("#filtersForm");
+const branchSelect = document.querySelector("#branchSelect");
+const periodSelect = document.querySelector("#periodSelect");
+const customRange = document.querySelector("#customRange");
+const clientSearch = document.querySelector("#clientSearch");
+const requestSearch = document.querySelector("#requestSearch");
+const exportButton = document.querySelector("#exportButton");
+const systemIcon = document.querySelector(".system-icon");
+
+systemIcon.addEventListener("error", () => {
+  systemIcon.hidden = true;
+  systemIcon.closest(".system-icon-frame")?.classList.add("is-empty");
+});
+
 document.querySelector("#startDate").value = isoToday;
 document.querySelector("#endDate").value = isoToday;
 
 function renderCard(formula) {
   const node = template.content.cloneNode(true);
-  node.querySelector(".formula-title").textContent = formula.name;
+  const card = node.querySelector(".formula-card");
+  const icon = node.querySelector(".formula-icon");
+  const chip = node.querySelector(".status-chip");
+
+  card.dataset.status = formula.status;
+  icon.innerHTML = statusIcons[formula.status]();
+  icon.classList.add(`icon-${formula.status}`);
   node.querySelector(".formula-meta").textContent = formula.id;
+  node.querySelector(".formula-title").textContent = formula.name;
   node.querySelector(".formula-client").textContent = formula.clientName;
   node.querySelector(".formula-order").textContent = formula.order;
   node.querySelector(".formula-origin").textContent = formula.origin;
+  node.querySelector(".formula-destination").textContent = formula.destination;
   node.querySelector(".formula-date").textContent = formula.date;
   node.querySelector(".formula-time").textContent = formula.time;
 
-  const chip = node.querySelector(".status-chip");
   chip.textContent = formula.statusLabel;
   chip.classList.add(
     formula.status === "a-receber"
@@ -364,14 +394,28 @@ function renderCard(formula) {
         : "badge-danger",
   );
 
-  const icon = node.querySelector(".formula-title-wrap");
-  icon.insertAdjacentHTML("beforebegin", `<span class="formula-icon ${formula.status === "a-receber" ? "icon-warn" : formula.status === "recebido" ? "icon-success" : "icon-danger"}" aria-hidden="true">${getStageIcon(formula.status)}</span>`);
-
   return node;
+}
+
+function renderEmptyState(column, status) {
+  const empty = document.createElement("p");
+  empty.className = "empty-state";
+  empty.textContent =
+    status === "pendentes"
+      ? "Nenhuma pendência no recorte atual."
+      : "Nenhuma fórmula encontrada para esta etapa.";
+  column.appendChild(empty);
 }
 
 function render() {
   const filteredFormulas = getFilteredFormulas();
+  const grouped = filteredFormulas.reduce(
+    (acc, formula) => {
+      acc[formula.status] += 1;
+      return acc;
+    },
+    { "a-receber": 0, recebido: 0, pendentes: 0 },
+  );
 
   Object.values(columns).forEach((column) => {
     column.innerHTML = "";
@@ -383,15 +427,21 @@ function render() {
       ? formulasByStatus
       : formulasByStatus.slice(0, collapsedLimit);
 
-    statusMeta[status].metric.textContent = formulasByStatus.length;
-    statusMeta[status].badge.textContent = formulasByStatus.length;
+    statusMeta[status].metric.textContent = grouped[status];
+    statusMeta[status].badge.textContent = grouped[status];
 
-    visibleFormulas.forEach((formula) => {
-      column.appendChild(renderCard(formula));
-    });
+    if (visibleFormulas.length === 0) {
+      renderEmptyState(column, status);
+    } else {
+      visibleFormulas.forEach((formula) => {
+        column.appendChild(renderCard(formula));
+      });
+    }
 
     updateColumnFooter(status, formulasByStatus.length);
   });
+
+  totalCount.textContent = filteredFormulas.length;
 }
 
 function getFilteredFormulas() {
@@ -462,15 +512,6 @@ function updateColumnFooter(status, total) {
     : `(+${remaining})`;
 }
 
-const filtersToggle = document.querySelector("#filtersToggle");
-const filtersPanel = document.querySelector("#filtersPanel");
-const filtersForm = document.querySelector("#filtersForm");
-const branchSelect = document.querySelector("#branchSelect");
-const periodSelect = document.querySelector("#periodSelect");
-const customRange = document.querySelector("#customRange");
-const clientSearch = document.querySelector("#clientSearch");
-const requestSearch = document.querySelector("#requestSearch");
-
 filtersToggle.addEventListener("click", () => {
   const shouldOpen = filtersPanel.hidden;
   filtersPanel.hidden = !shouldOpen;
@@ -497,10 +538,8 @@ document.querySelectorAll(".column-footer").forEach((button) => {
   });
 });
 
-render();
-
-document.querySelector("#exportButton").addEventListener("click", () => {
-  const payload = formulas.map((formula) => ({
+exportButton.addEventListener("click", () => {
+  const payload = getFilteredFormulas().map((formula) => ({
     codigo: formula.id,
     formula: formula.name,
     cliente: formula.clientName,
@@ -520,16 +559,13 @@ document.querySelector("#exportButton").addEventListener("click", () => {
   link.download = "controle-recebimento.json";
   link.click();
   URL.revokeObjectURL(url);
+
+  const label = exportButton.querySelector("span:last-child");
+  const previousLabel = label.textContent;
+  label.textContent = "Exportado";
+  window.setTimeout(() => {
+    label.textContent = previousLabel;
+  }, 1400);
 });
 
-function getStageIcon(status) {
-  if (status === "a-receber") {
-    return iconTruck();
-  }
-
-  if (status === "recebido") {
-    return iconCheck();
-  }
-
-  return iconClock();
-}
+render();

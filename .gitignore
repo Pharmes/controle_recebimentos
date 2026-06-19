@@ -25,3 +25,5 @@ dist/
 impeccable/
 playwright-skill/
 ui-ux-pro-max-skill/
+
+.vercel
