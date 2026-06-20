@@ -62,6 +62,12 @@ const STATUS_BY_STEP_OPERATION = {
   },
 };
 
+const STATUS_PRIORITY = {
+  pendentes: 1,
+  "a-receber": 2,
+  recebido: 3,
+};
+
 const STEP_LABELS = {
   "08": "Logistica",
   10: "Balcao",
@@ -80,9 +86,11 @@ export function getStatusFromErp(row) {
 }
 
 export function normalizeErpRows(rows) {
-  return rows
+  const normalizedRows = rows
     .map((row) => normalizeErpRow(row))
     .filter((row) => row.status !== "ignorado");
+
+  return getCurrentRowsByRequest(normalizedRows);
 }
 
 export function getDestinationBranches(rows) {
@@ -186,6 +194,38 @@ function normalizeErpRow(row) {
     status: statusMeta?.status ?? "ignorado",
     statusLabel: statusMeta?.statusLabel ?? "Ignorado",
   };
+}
+
+function getCurrentRowsByRequest(rows) {
+  const rowsByRequest = new Map();
+
+  rows.forEach((row) => {
+    const currentRow = rowsByRequest.get(row.id);
+
+    if (!currentRow || compareCurrentStatus(row, currentRow) > 0) {
+      rowsByRequest.set(row.id, row);
+    }
+  });
+
+  return [...rowsByRequest.values()];
+}
+
+function compareCurrentStatus(nextRow, currentRow) {
+  const nextPriority = STATUS_PRIORITY[nextRow.status] ?? 0;
+  const currentPriority = STATUS_PRIORITY[currentRow.status] ?? 0;
+
+  if (nextPriority !== currentPriority) {
+    return nextPriority - currentPriority;
+  }
+
+  return compareDateTime(nextRow.dtentr, nextRow.hrcad, currentRow.dtentr, currentRow.hrcad);
+}
+
+function compareDateTime(nextDate, nextTime, currentDate, currentTime) {
+  const nextValue = `${nextDate || ""}T${nextTime || "00:00"}`;
+  const currentValue = `${currentDate || ""}T${currentTime || "00:00"}`;
+
+  return nextValue.localeCompare(currentValue);
 }
 
 function getField(row, field) {
