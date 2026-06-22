@@ -10,6 +10,8 @@ import path from "node:path";
 const SUPABASE_PROJECT_ID = "dbwgricmddvfetompjcj";
 const SUPABASE_URL = process.env.SUPABASE_URL || `https://${SUPABASE_PROJECT_ID}.supabase.co`;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+const SUPABASE_SETTINGS_SCHEMA = "controle de recebimentos";
+const SUPABASE_SETTINGS_TABLE = "system_seting";
 const LOCAL_SETTINGS_PATH = path.join(process.cwd(), ".local", "system-settings.json");
 
 export default async function handler(request, response) {
@@ -122,7 +124,7 @@ async function saveLocalDelaySetting(prazoAtrasoHoras) {
 
 async function readDelaySetting() {
   const result = await supabaseFetch(
-    `/rest/v1/system_settings?key=eq.${encodeURIComponent(DELAY_SETTING_KEY)}&select=key,value,updated_at&limit=1`,
+    `/rest/v1/${SUPABASE_SETTINGS_TABLE}?key=eq.${encodeURIComponent(DELAY_SETTING_KEY)}&select=key,value,updated_at&limit=1`,
   );
   const row = Array.isArray(result) ? result[0] : null;
 
@@ -136,7 +138,7 @@ async function readDelaySetting() {
 }
 
 async function saveDelaySetting(prazoAtrasoHoras) {
-  const [row] = await supabaseFetch(`/rest/v1/system_settings?on_conflict=key`, {
+  const [row] = await supabaseFetch(`/rest/v1/${SUPABASE_SETTINGS_TABLE}?on_conflict=key`, {
     method: "POST",
     headers: {
       Prefer: "resolution=merge-duplicates,return=representation",
@@ -166,6 +168,8 @@ async function supabaseFetch(path, options = {}) {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
+      "Accept-Profile": SUPABASE_SETTINGS_SCHEMA,
+      "Content-Profile": SUPABASE_SETTINGS_SCHEMA,
       ...(options.headers || {}),
     },
   });
