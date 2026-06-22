@@ -11,6 +11,7 @@ const SUPABASE_PROJECT_ID = "dbwgricmddvfetompjcj";
 const SUPABASE_URL = process.env.SUPABASE_URL || `https://${SUPABASE_PROJECT_ID}.supabase.co`;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 const SUPABASE_SETTINGS_SOURCES = [
+  { schema: "controle_recebimentos", table: "system_settings" },
   { schema: "controle_recebimentos", table: "system.settings" },
   { schema: "controle_recebimentos", table: "settings" },
   { schema: "controle_recebimentos", table: "system_seting" },
