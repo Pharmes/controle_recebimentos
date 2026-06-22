@@ -11,7 +11,9 @@ const SUPABASE_PROJECT_ID = "dbwgricmddvfetompjcj";
 const SUPABASE_URL = process.env.SUPABASE_URL || `https://${SUPABASE_PROJECT_ID}.supabase.co`;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
 const SUPABASE_SETTINGS_SOURCES = [
-  { schema: "controle de recebimentos", table: "system_seting" },
+  { schema: "controle_recebimentos", table: "system.settings" },
+  { schema: "controle_recebimentos", table: "settings" },
+  { schema: "controle_recebimentos", table: "system_seting" },
   { schema: "public", table: "system_seting" },
   { schema: "public", table: "system_settings" },
 ];
@@ -127,7 +129,7 @@ async function saveLocalDelaySetting(prazoAtrasoHoras) {
 
 async function readDelaySetting() {
   const { result } = await supabaseFetchWithFallback((source) => ({
-    path: `/rest/v1/${source.table}?key=eq.${encodeURIComponent(DELAY_SETTING_KEY)}&select=key,value,updated_at&limit=1`,
+    path: `/rest/v1/${encodeURIComponent(source.table)}?key=eq.${encodeURIComponent(DELAY_SETTING_KEY)}&select=key,value,updated_at&limit=1`,
     source,
   }));
   const row = Array.isArray(result) ? result[0] : null;
@@ -143,7 +145,7 @@ async function readDelaySetting() {
 
 async function saveDelaySetting(prazoAtrasoHoras) {
   const { result } = await supabaseFetchWithFallback((source) => ({
-    path: `/rest/v1/${source.table}?on_conflict=key`,
+    path: `/rest/v1/${encodeURIComponent(source.table)}?on_conflict=key`,
     source,
     options: {
       method: "POST",
