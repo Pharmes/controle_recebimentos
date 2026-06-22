@@ -10,8 +10,11 @@ import path from "node:path";
 const SUPABASE_PROJECT_ID = "dbwgricmddvfetompjcj";
 const SUPABASE_URL = process.env.SUPABASE_URL || `https://${SUPABASE_PROJECT_ID}.supabase.co`;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
-const SUPABASE_SETTINGS_SCHEMA = "controle de recebimentos";
-const SUPABASE_SETTINGS_TABLE = "system_seting";
+const SUPABASE_SETTINGS_SOURCES = [
+  { schema: "controle de recebimentos", table: "system_seting" },
+  { schema: "public", table: "system_seting" },
+  { schema: "public", table: "system_settings" },
+];
 const LOCAL_SETTINGS_PATH = path.join(process.cwd(), ".local", "system-settings.json");
 
 export default async function handler(request, response) {
@@ -123,9 +126,10 @@ async function saveLocalDelaySetting(prazoAtrasoHoras) {
 }
 
 async function readDelaySetting() {
-  const result = await supabaseFetch(
-    `/rest/v1/${SUPABASE_SETTINGS_TABLE}?key=eq.${encodeURIComponent(DELAY_SETTING_KEY)}&select=key,value,updated_at&limit=1`,
-  );
+  const { result } = await supabaseFetchWithFallback((source) => ({
+    path: `/rest/v1/${source.table}?key=eq.${encodeURIComponent(DELAY_SETTING_KEY)}&select=key,value,updated_at&limit=1`,
+    source,
+  }));
   const row = Array.isArray(result) ? result[0] : null;
 
   return {
@@ -138,19 +142,24 @@ async function readDelaySetting() {
 }
 
 async function saveDelaySetting(prazoAtrasoHoras) {
-  const [row] = await supabaseFetch(`/rest/v1/${SUPABASE_SETTINGS_TABLE}?on_conflict=key`, {
-    method: "POST",
-    headers: {
-      Prefer: "resolution=merge-duplicates,return=representation",
-    },
-    body: JSON.stringify([
-      {
-        key: DELAY_SETTING_KEY,
-        value: { hours: prazoAtrasoHoras },
-        updated_at: new Date().toISOString(),
+  const { result } = await supabaseFetchWithFallback((source) => ({
+    path: `/rest/v1/${source.table}?on_conflict=key`,
+    source,
+    options: {
+      method: "POST",
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation",
       },
-    ]),
-  });
+      body: JSON.stringify([
+        {
+          key: DELAY_SETTING_KEY,
+          value: { hours: prazoAtrasoHoras },
+          updated_at: new Date().toISOString(),
+        },
+      ]),
+    },
+  }));
+  const [row] = result;
 
   return {
     prazoAtrasoHoras: normalizeDelayHours(row?.value?.hours),
@@ -161,15 +170,38 @@ async function saveDelaySetting(prazoAtrasoHoras) {
   };
 }
 
-async function supabaseFetch(path, options = {}) {
+async function supabaseFetchWithFallback(createRequest) {
+  let lastError;
+
+  for (const source of SUPABASE_SETTINGS_SOURCES) {
+    try {
+      const request = createRequest(source);
+      const result = await supabaseFetch(request.path, request.options || {}, request.source);
+
+      return { result, source };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+}
+
+async function supabaseFetch(path, options = {}, source = SUPABASE_SETTINGS_SOURCES[0]) {
+  const schemaHeaders =
+    source.schema && source.schema !== "public"
+      ? {
+          "Accept-Profile": source.schema,
+          "Content-Profile": source.schema,
+        }
+      : {};
   const apiResponse = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
-      "Accept-Profile": SUPABASE_SETTINGS_SCHEMA,
-      "Content-Profile": SUPABASE_SETTINGS_SCHEMA,
+      ...schemaHeaders,
       ...(options.headers || {}),
     },
   });
