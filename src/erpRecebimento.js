@@ -1,3 +1,5 @@
+import { DEFAULT_DELAY_HOURS, normalizeDelayHours } from "./delaySettings.js";
+
 export const DEFAULT_CDFILD = "12";
 
 export const ERP_WINDOW = {
@@ -17,22 +19,36 @@ SELECT
     v.hrret,
     v.cdfild,
     p.cdetapa,
-    p.cdopera
+    p.cdopera,
+    CASE
+        WHEN {deadlineExpression} <= CURRENT_TIMESTAMP
+            AND {missingLogisticsExitExpression}
+        THEN 1
+        ELSE 0
+    END AS atrasada,
+    {delayHours} AS prazo_atraso_horas,
+    {deadlineExpression} AS data_limite_atraso
 FROM
     fc12100 v
-INNER JOIN
+LEFT JOIN
     fc12500 p ON p.nrrqu = v.nrrqu
     AND p.cdfil  = v.cdfil
     AND p.serier = v.serier
+    AND p.cdetapa IN ('08','10')
 WHERE 1=1
-    AND v.dtret BETWEEN {startDate} AND {endDate}
+    AND (
+        v.dtret BETWEEN {startDate} AND {endDate}
+        OR (
+            {deadlineExpression} <= CURRENT_TIMESTAMP
+            AND {missingLogisticsExitExpression}
+        )
+    )
     AND v.cdfild IN (12)
-    AND p.cdetapa IN ('08','10');
 `.trim();
 
 export function buildRecebimentoErpQuery(
   cdfilds = [DEFAULT_CDFILD],
-  { startDate, endDate } = {},
+  { startDate, endDate, delayHours = DEFAULT_DELAY_HOURS } = {},
 ) {
   const branchList = cdfilds
     .map((cdfild) => Number.parseInt(cdfild, 10))
@@ -41,13 +57,31 @@ export function buildRecebimentoErpQuery(
 
   const rangeStart = startDate ? toFirebirdDateLiteral(startDate) : "current_date - 1";
   const rangeEnd = endDate ? toFirebirdDateLiteral(endDate) : "current_date + 5";
+  const normalizedDelayHours = normalizeDelayHours(delayHours);
+  const deadlineExpression = `DATEADD(${normalizedDelayHours} HOUR TO CAST(v.dtret AS TIMESTAMP))`;
+  const missingLogisticsExitExpression = `NOT EXISTS (
+            SELECT 1
+            FROM fc12500 saida_logistica
+            WHERE saida_logistica.nrrqu = v.nrrqu
+                AND saida_logistica.cdfil = v.cdfil
+                AND saida_logistica.serier = v.serier
+                AND saida_logistica.cdetapa = '08'
+                AND saida_logistica.cdopera = 2
+        )`;
 
   return RECEBIMENTO_ERP_QUERY.replace("{startDate}", rangeStart)
     .replace("{endDate}", rangeEnd)
+    .replaceAll("{delayHours}", String(normalizedDelayHours))
+    .replaceAll("{deadlineExpression}", deadlineExpression)
+    .replaceAll("{missingLogisticsExitExpression}", missingLogisticsExitExpression)
     .replace("AND v.cdfild IN (12)", `AND v.cdfild IN (${branchList || DEFAULT_CDFILD})`);
 }
 
 const STATUS_BY_STEP_OPERATION = {
+  "00:0": {
+    status: "atrasados",
+    statusLabel: "Atrasado",
+  },
   "08:1": {
     status: "pendentes",
     statusLabel: "Pendente",
@@ -64,6 +98,7 @@ const STATUS_BY_STEP_OPERATION = {
 
 const STATUS_PRIORITY = {
   pendentes: 1,
+  atrasados: 2,
   "a-receber": 2,
   recebido: 3,
 };
@@ -101,7 +136,8 @@ export function getDestinationBranches(rows) {
 
 export function createMockErpRows(referenceDate = new Date()) {
   const rows = [
-    ["12", "22091", "1", "Ana Silva", -2, "08:20", 0, "10:40", "12", "08", 2],
+    ["12", "22090", "1", "Daniela Martins", -4, "08:00", -2, "10:00", "12", "08", 1, 1],
+    ["12", "22091", "1", "Ana Silva", -2, "08:20", 0, "10:40", "12", "08", 2, 0],
     ["12", "22092", "1", "Marcos Souza", -1, "09:10", 0, "11:25", "12", "08", 1],
     ["12", "22093", "2", "Claudia Rocha", -1, "10:30", 1, "12:10", "12", "10", 1],
     ["7", "22094", "1", "Renata Alves", 0, "08:45", 1, "13:20", "12", "08", 2],
@@ -131,6 +167,7 @@ export function createMockErpRows(referenceDate = new Date()) {
       cdfild,
       cdetapa,
       cdopera,
+      atrasada = 0,
     ]) => ({
       cdfil,
       nrrqu,
@@ -143,6 +180,9 @@ export function createMockErpRows(referenceDate = new Date()) {
       cdfild,
       cdetapa,
       cdopera,
+      atrasada,
+      prazo_atraso_horas: DEFAULT_DELAY_HOURS,
+      data_limite_atraso: formatDateInput(addDays(referenceDate, dtretOffset + 1)),
     }),
   );
 }
@@ -169,7 +209,10 @@ function normalizeErpRow(row) {
   const cdfild = normalizeCode(getField(row, "cdfild"));
   const cdetapa = normalizeStep(getField(row, "cdetapa"));
   const cdopera = normalizeOperation(getField(row, "cdopera"));
+  const isLate = normalizeBoolean(getField(row, "atrasada"));
   const statusMeta = STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`];
+  const effectiveStatusMeta =
+    isLate && statusMeta?.status !== "recebido" ? STATUS_BY_STEP_OPERATION["00:0"] : statusMeta;
   const request = `${cdfil}-${nrrqu}-${serier}`;
 
   return {
@@ -187,12 +230,15 @@ function normalizeErpRow(row) {
     cdfild,
     cdetapa,
     cdopera,
+    atrasada: isLate,
+    prazoAtrasoHoras: normalizeDelayHours(getField(row, "prazo_atraso_horas")),
+    dataLimiteAtraso: normalizeDateTime(getField(row, "data_limite_atraso")),
     stepLabel: `${cdetapa} - ${STEP_LABELS[cdetapa] ?? "Etapa"}`,
     operationLabel: `${cdopera} - ${OPERATION_LABELS[cdopera] ?? "Operacao"}`,
     origin: `Filial origem ${cdfil}`,
     destination: `Filial destino ${cdfild}`,
-    status: statusMeta?.status ?? "ignorado",
-    statusLabel: statusMeta?.statusLabel ?? "Ignorado",
+    status: effectiveStatusMeta?.status ?? "ignorado",
+    statusLabel: effectiveStatusMeta?.statusLabel ?? "Ignorado",
   };
 }
 
@@ -280,6 +326,22 @@ function normalizeTime(value) {
   }
 
   return text;
+}
+
+function normalizeDateTime(value) {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return normalizeCode(value);
+}
+
+function normalizeBoolean(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return ["1", "true", "t", "yes", "sim"].includes(normalizeCode(value).toLowerCase());
 }
 
 function toFirebirdDateLiteral(value) {

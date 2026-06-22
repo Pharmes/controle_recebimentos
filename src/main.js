@@ -1,14 +1,13 @@
 import "./style.css";
 import logoPharmesUrl from "./img/logopharmes.png";
 import {
-  DEFAULT_CDFILD,
   ERP_WINDOW,
   addDays,
   createMockErpRows,
   formatDateInput,
-  getDestinationBranches,
   normalizeErpRows,
 } from "./erpRecebimento.js";
+import { ALLOWED_DELAY_HOURS, DEFAULT_DELAY_HOURS, normalizeDelayHours } from "./delaySettings.js";
 
 const app = document.querySelector("#app");
 const today = new Date();
@@ -54,6 +53,25 @@ function iconClock() {
   `;
 }
 
+function iconAlert() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 8v5"></path>
+      <path d="M12 17h.01"></path>
+      <path d="M10.4 4.2 2.7 18a1.6 1.6 0 0 0 1.4 2.4h15.8a1.6 1.6 0 0 0 1.4-2.4L13.6 4.2a1.8 1.8 0 0 0-3.2 0Z"></path>
+    </svg>
+  `;
+}
+
+function iconGear() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="3"></circle>
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 .9-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5.9h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path>
+    </svg>
+  `;
+}
+
 function iconFilter() {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -92,6 +110,10 @@ app.innerHTML = `
         </div>
 
         <div class="topbar-actions">
+          <button class="btn btn-outline btn-settings" id="settingsButton" type="button" aria-haspopup="dialog">
+            <span class="btn-icon">${iconGear()}</span>
+            <span>Configurações</span>
+          </button>
           <button class="btn btn-outline" id="filtersToggle" type="button" aria-expanded="false" aria-controls="filtersPanel">
             <span class="btn-icon">${iconFilter()}</span>
             <span>Filtros</span>
@@ -104,6 +126,43 @@ app.innerHTML = `
       </header>
 
       <p class="data-status" id="dataStatus" role="status" aria-live="polite" hidden></p>
+
+      <dialog class="settings-modal" id="settingsModal" aria-labelledby="settingsTitle">
+        <form class="settings-panel" id="settingsForm" method="dialog">
+          <div class="settings-head">
+            <span class="settings-icon" aria-hidden="true">${iconGear()}</span>
+            <div>
+              <h2 id="settingsTitle">Configurações gerais</h2>
+              <p>Parâmetros que controlam a lógica operacional do sistema.</p>
+            </div>
+          </div>
+
+          <fieldset class="settings-fieldset">
+            <legend>Prazo para considerar a requisição atrasada</legend>
+            <p class="settings-current" id="settingsCurrent">Valor atual: 22 horas</p>
+            <div class="delay-options" id="delayOptions">
+              ${ALLOWED_DELAY_HOURS.map(
+                (hours) => `
+                  <label class="delay-option">
+                    <input type="radio" name="delayHours" value="${hours}" />
+                    <span>
+                      <strong>${hours} horas</strong>
+                      <small>${formatDelayDescription(hours)}</small>
+                    </span>
+                  </label>
+                `,
+              ).join("")}
+            </div>
+          </fieldset>
+
+          <p class="settings-feedback" id="settingsFeedback" role="status" aria-live="polite" hidden></p>
+
+          <div class="settings-actions">
+            <button class="btn btn-outline" id="settingsCancel" type="button">Cancelar</button>
+            <button class="btn btn-primary" type="submit">Salvar configuração</button>
+          </div>
+        </form>
+      </dialog>
 
       <section class="filters-panel" id="filtersPanel" aria-label="Filtros por filial destino e período" hidden>
         <form class="filters-grid" id="filtersForm">
@@ -165,6 +224,11 @@ app.innerHTML = `
           <strong class="summary-value" id="countPendentes">0</strong>
           <small>Entrada na logística</small>
         </article>
+        <article class="summary-card status-late">
+          <span class="summary-label">Atrasados</span>
+          <strong class="summary-value" id="countAtrasados">0</strong>
+          <small>Sem PCP de saída após o prazo</small>
+        </article>
       </section>
 
       <section class="kanban" id="kanban" aria-label="Requisições por status de recebimento">
@@ -215,6 +279,22 @@ app.innerHTML = `
             <span class="column-footer-icon" aria-hidden="true">›</span>
           </button>
         </article>
+
+        <article class="column column-atrasados">
+          <div class="column-head">
+            <div>
+              <span class="column-icon" aria-hidden="true">${iconAlert()}</span>
+              <h3>Atrasados</h3>
+            </div>
+            <span class="badge badge-danger" id="badgeAtrasados">0</span>
+          </div>
+          <div class="column-body" id="col-atrasados"></div>
+          <button class="column-footer" type="button" data-status="atrasados" aria-expanded="false">
+            <span class="column-footer-label">Ver todos</span>
+            <span class="column-footer-count">(0)</span>
+            <span class="column-footer-icon" aria-hidden="true">›</span>
+          </button>
+        </article>
       </section>
     </main>
   </div>
@@ -247,6 +327,10 @@ app.innerHTML = `
             <span class="formula-withdrawal-time"></span>
           </span>
         </div>
+        <div class="formula-row formula-late-row">
+          <span class="formula-key">Limite</span>
+          <span class="formula-value formula-deadline"></span>
+        </div>
         <div class="formula-row">
           <span class="formula-key">Origem</span>
           <span class="formula-value formula-origin"></span>
@@ -269,20 +353,24 @@ app.innerHTML = `
 `;
 
 const collapsedLimit = 3;
+const STATUS_KEYS = ["a-receber", "recebido", "pendentes", "atrasados"];
 const expandedColumns = {
   "a-receber": false,
   recebido: false,
   pendentes: false,
+  atrasados: false,
 };
 
 let formulas = [];
 let isLoading = false;
 let dataStatusTimer = null;
+let currentDelayHours = DEFAULT_DELAY_HOURS;
 
 const columns = {
   "a-receber": document.querySelector("#col-a-receber"),
   recebido: document.querySelector("#col-recebido"),
   pendentes: document.querySelector("#col-pendentes"),
+  atrasados: document.querySelector("#col-atrasados"),
 };
 
 const statusMeta = {
@@ -298,12 +386,17 @@ const statusMeta = {
     metric: document.querySelector("#countPendentes"),
     badge: document.querySelector("#badgePendentes"),
   },
+  atrasados: {
+    metric: document.querySelector("#countAtrasados"),
+    badge: document.querySelector("#badgeAtrasados"),
+  },
 };
 
 const statusIcons = {
   "a-receber": iconTruck,
   recebido: iconCheck,
   pendentes: iconClock,
+  atrasados: iconAlert,
 };
 
 const template = document.querySelector("#formula-template");
@@ -316,6 +409,12 @@ const branchSelect = document.querySelector("#branchSelect");
 const stageSelect = document.querySelector("#stageSelect");
 const requestSearch = document.querySelector("#requestSearch");
 const exportButton = document.querySelector("#exportButton");
+const settingsButton = document.querySelector("#settingsButton");
+const settingsModal = document.querySelector("#settingsModal");
+const settingsForm = document.querySelector("#settingsForm");
+const settingsCancel = document.querySelector("#settingsCancel");
+const settingsCurrent = document.querySelector("#settingsCurrent");
+const settingsFeedback = document.querySelector("#settingsFeedback");
 const systemIcon = document.querySelector(".system-icon");
 const startDateInput = document.querySelector("#startDate");
 const endDateInput = document.querySelector("#endDate");
@@ -327,6 +426,7 @@ systemIcon.addEventListener("error", () => {
 populateBranchFilter();
 startDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.startOffsetDays));
 endDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
+syncSettingsUi();
 
 function populateBranchFilter() {
   branchSelect.innerHTML = [
@@ -352,6 +452,66 @@ function setDataStatus(state, message, { autoHide = false } = {}) {
   }
 }
 
+async function loadSettings() {
+  try {
+    const response = await fetch("/api/configuracao", {
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha ao consultar configuracao: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    currentDelayHours = normalizeDelayHours(payload?.prazoAtrasoHoras);
+    syncSettingsUi();
+  } catch {
+    currentDelayHours = DEFAULT_DELAY_HOURS;
+    syncSettingsUi();
+  }
+}
+
+async function saveSettings(delayHours) {
+  const response = await fetch("/api/configuracao", {
+    method: "PUT",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prazoAtrasoHoras: delayHours,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload?.error || `Falha ao salvar configuracao: ${response.status}`);
+  }
+
+  currentDelayHours = normalizeDelayHours(payload?.prazoAtrasoHoras);
+  syncSettingsUi();
+}
+
+function syncSettingsUi() {
+  settingsCurrent.textContent = `Valor atual: ${currentDelayHours} horas`;
+  settingsFeedback.hidden = true;
+
+  settingsForm.querySelectorAll('input[name="delayHours"]').forEach((input) => {
+    input.checked = Number(input.value) === currentDelayHours;
+  });
+}
+
+function formatDelayDescription(hours) {
+  if (hours === 22) return "22 horas após a data prevista";
+  if (hours === 48) return "2 dias após a data prevista";
+  if (hours === 72) return "3 dias após a data prevista";
+
+  return "32 horas após a data prevista";
+}
+
 async function loadRealData() {
   if (isLoading) {
     return;
@@ -366,7 +526,7 @@ async function loadRealData() {
 
   try {
     const response = await fetch(
-      `/api/recebimento?cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}`,
+      `/api/recebimento?cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}&delayHours=${encodeURIComponent(currentDelayHours)}`,
       {
         headers: {
           Accept: "application/json",
@@ -424,6 +584,7 @@ function renderCard(formula) {
   node.querySelector(".formula-entry-time").textContent = formula.hrcad || "--:--";
   node.querySelector(".formula-withdrawal-date").textContent = formatDisplayDate(formula.dtret);
   node.querySelector(".formula-withdrawal-time").textContent = formula.hrret || "--:--";
+  node.querySelector(".formula-deadline").textContent = formatDeadline(formula);
   node.querySelector(".formula-origin").textContent = formatBranch("Origem", formula.cdfil);
   node.querySelector(".formula-destination").textContent = formatBranch("Destino", formula.cdfild);
   node.querySelector(".formula-stage").textContent = formula.stepLabel;
@@ -456,7 +617,9 @@ function renderEmptyState(column, status) {
   const empty = document.createElement("p");
   empty.className = "empty-state";
   empty.textContent =
-    status === "pendentes"
+    status === "atrasados"
+      ? "Nenhuma requisição atrasada no recorte atual."
+      : status === "pendentes"
       ? "Nenhuma pendência no recorte atual."
       : "Nenhuma requisição encontrada para esta etapa.";
   column.appendChild(empty);
@@ -467,10 +630,12 @@ function render() {
   const filteredFormulas = getFilteredFormulas();
   const grouped = filteredFormulas.reduce(
     (acc, formula) => {
-      acc[formula.status] += 1;
+      if (formula.status in acc) {
+        acc[formula.status] += 1;
+      }
       return acc;
     },
-    { "a-receber": 0, recebido: 0, pendentes: 0 },
+    Object.fromEntries(STATUS_KEYS.map((status) => [status, 0])),
   );
 
   Object.values(columns).forEach((column) => {
@@ -585,6 +750,18 @@ function formatDisplayDate(dateValue) {
   return `${day}/${month}/${year}`;
 }
 
+function formatDeadline(formula) {
+  if (formula.dataLimiteAtraso) {
+    const value = String(formula.dataLimiteAtraso);
+    const date = formatDisplayDate(value);
+    const timeMatch = value.match(/(?:T|\s)(\d{2}:\d{2})/);
+
+    return timeMatch ? `${date} ${timeMatch[1]}` : `${date} 00:00`;
+  }
+
+  return `${formatDisplayDate(formula.dtret)} + ${formula.prazoAtrasoHoras || currentDelayHours}h`;
+}
+
 function formatNumber(value) {
   return numberFormatter.format(value);
 }
@@ -594,6 +771,41 @@ function formatBranch(label, branch) {
   const branchName = FILIAL_LABELS[code];
 
   return branchName ? `${label} ${code} - ${branchName}` : `${label} ${code || "--"}`;
+}
+
+function buildExportCsv(rows) {
+  const columns = [
+    ["Status", (formula) => formula.statusLabel],
+    ["Requisição", (formula) => formula.request],
+    ["Paciente", (formula) => formula.nomepa],
+    ["Filial origem", (formula) => formatBranch("Origem", formula.cdfil)],
+    ["Filial destino", (formula) => formatBranch("Destino", formula.cdfild)],
+    ["Data entrada", (formula) => formatDisplayDate(formula.dtentr)],
+    ["Hora entrada", (formula) => formula.hrcad || ""],
+    ["Data retirada", (formula) => formatDisplayDate(formula.dtret)],
+    ["Hora retirada", (formula) => formula.hrret || ""],
+    ["Etapa", (formula) => formula.stepLabel],
+    ["Operação", (formula) => formula.operationLabel],
+    ["Atrasada", (formula) => (formula.atrasada ? "Sim" : "Não")],
+    ["Prazo atraso horas", (formula) => formula.prazoAtrasoHoras || currentDelayHours],
+    ["Data limite atraso", (formula) => formatDeadline(formula)],
+  ];
+  const header = columns.map(([label]) => escapeCsvCell(label)).join(";");
+  const lines = rows.map((formula) =>
+    columns.map(([, getValue]) => escapeCsvCell(getValue(formula))).join(";"),
+  );
+
+  return [header, ...lines].join("\r\n");
+}
+
+function escapeCsvCell(value) {
+  const text = String(value ?? "");
+
+  if (/[;"\r\n]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+
+  return text;
 }
 
 function updateColumnFooter(status, total) {
@@ -662,31 +874,68 @@ document.querySelectorAll(".column-footer").forEach((button) => {
   });
 });
 
-exportButton.addEventListener("click", () => {
-  const payload = getFilteredFormulas().map((formula) => ({
-    cdfil: formula.cdfil,
-    nrrqu: formula.nrrqu,
-    serier: formula.serier,
-    nomepa: formula.nomepa,
-    requisicao: formula.request,
-    dtentr: formula.dtentr,
-    hrcad: formula.hrcad,
-    dtret: formula.dtret,
-    hrret: formula.hrret,
-    cdfild: formula.cdfild,
-    cdetapa: formula.cdetapa,
-    cdopera: formula.cdopera,
-    status: formula.statusLabel,
-  }));
+settingsButton.addEventListener("click", () => {
+  syncSettingsUi();
+  settingsModal.showModal();
+});
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json;charset=utf-8",
+settingsCancel.addEventListener("click", () => {
+  settingsModal.close();
+});
+
+settingsModal.addEventListener("click", (event) => {
+  if (event.target === settingsModal) {
+    settingsModal.close();
+  }
+});
+
+settingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(settingsForm);
+  const delayHours = normalizeDelayHours(formData.get("delayHours"));
+  const submitButton = settingsForm.querySelector('button[type="submit"]');
+
+  submitButton.disabled = true;
+  settingsFeedback.hidden = false;
+  settingsFeedback.dataset.state = "loading";
+  settingsFeedback.textContent = "Salvando configuração...";
+
+  try {
+    await saveSettings(delayHours);
+    settingsFeedback.dataset.state = "success";
+    settingsFeedback.textContent = `Configuração salva: ${currentDelayHours} horas.`;
+    await loadRealData();
+    settingsModal.close();
+  } catch (error) {
+    settingsFeedback.dataset.state = "error";
+    settingsFeedback.textContent =
+      error instanceof Error ? error.message : "Falha ao salvar configuração.";
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+exportButton.addEventListener("click", () => {
+  const rows = getFilteredFormulas();
+
+  if (rows.length === 0) {
+    setDataStatus("fallback", "Não há registros no recorte atual para exportar.", {
+      autoHide: true,
+    });
+    return;
+  }
+
+  const csv = buildExportCsv(rows);
+  const blob = new Blob([`\uFEFF${csv}`], {
+    type: "text/csv;charset=utf-8",
   });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "controle-recebimento.json";
+  link.download = `controle-recebimento-${formatDateInput(new Date())}.csv`;
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   URL.revokeObjectURL(url);
 
   const label = exportButton.querySelector("span:last-child");
@@ -698,4 +947,6 @@ exportButton.addEventListener("click", () => {
 });
 
 render();
-loadRealData();
+loadSettings().finally(() => {
+  loadRealData();
+});
