@@ -36,13 +36,7 @@ LEFT JOIN
     AND p.serier = v.serier
     AND p.cdetapa IN ('08','10')
 WHERE 1=1
-    AND (
-        v.dtret BETWEEN {startDate} AND {endDate}
-        OR (
-            {deadlineExpression} <= CURRENT_TIMESTAMP
-            AND {missingLogisticsExitExpression}
-        )
-    )
+    AND v.dtret BETWEEN {startDate} AND {endDate}
     AND v.cdfild IN (12)
 `.trim();
 
