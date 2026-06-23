@@ -618,7 +618,7 @@ function renderEmptyState(column, status) {
   empty.className = "empty-state";
   empty.textContent =
     status === "atrasados"
-      ? "Nenhuma requisição atrasada no recorte atual."
+      ? "Nenhuma requisição atrasada hoje para o filtro selecionado."
       : status === "pendentes"
       ? "Nenhuma pendência no recorte atual."
       : "Nenhuma requisição encontrada para esta etapa.";
@@ -630,8 +630,10 @@ function render() {
   const filteredFormulas = getFilteredFormulas();
   const grouped = filteredFormulas.reduce(
     (acc, formula) => {
-      if (formula.status in acc) {
-        acc[formula.status] += 1;
+      const status = getRenderStatus(formula);
+
+      if (status in acc) {
+        acc[status] += 1;
       }
       return acc;
     },
@@ -643,7 +645,7 @@ function render() {
   });
 
   Object.entries(columns).forEach(([status, column]) => {
-    const formulasByStatus = filteredFormulas.filter((formula) => formula.status === status);
+    const formulasByStatus = filteredFormulas.filter((formula) => getRenderStatus(formula) === status);
     const visibleFormulas = expandedColumns[status]
       ? formulasByStatus
       : formulasByStatus.slice(0, collapsedLimit);
@@ -678,6 +680,22 @@ function getFilteredFormulas() {
   });
 }
 
+function getRenderStatus(formula) {
+  if (formula.status !== "atrasados") {
+    return formula.status;
+  }
+
+  return isLateToday(formula) ? "atrasados" : "__hidden__";
+}
+
+function isLateToday(formula) {
+  return getDateKey(formula.dataLimiteAtraso) === isoToday;
+}
+
+function getDateKey(value) {
+  return String(value ?? "").slice(0, 10);
+}
+
 function getAvailableFormulas({ ignoreStage = false } = {}) {
   const stage = ignoreStage ? "all" : stageSelect.value;
   const requestQuery = normalizeSearch(requestSearch.value);
@@ -689,6 +707,10 @@ function getAvailableFormulas({ ignoreStage = false } = {}) {
 
     return matchesStage && matchesRequest;
   });
+}
+
+function getVisibleFormulas() {
+  return getFilteredFormulas().filter((formula) => getRenderStatus(formula) !== "__hidden__");
 }
 
 function normalizeDateRangeInputs() {
@@ -916,7 +938,7 @@ settingsForm.addEventListener("submit", async (event) => {
 });
 
 exportButton.addEventListener("click", () => {
-  const rows = getFilteredFormulas();
+  const rows = getVisibleFormulas();
 
   if (rows.length === 0) {
     setDataStatus("fallback", "Não há registros no recorte atual para exportar.", {
