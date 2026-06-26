@@ -14,24 +14,21 @@ SELECT
     v.dtentr,
     v.hrcad,
     v.dtret,
-    EXTRACT (HOUR FROM v.hrret) hrret,
-    v.cdfild
+    v.hrret,
+    v.cdfild,
+    p.cdetapa,
+    p.cdopera
 FROM
     fc12100 v
-
+LEFT JOIN
+    fc12500 p ON p.nrrqu = v.nrrqu
+    AND p.cdfil = v.cdfil
+    AND p.serier = v.serier
+    AND p.cdetapa IN ('00', '08', '10')
 WHERE 1=1
-    AND v.dtret >= '2026-06-01'
-    AND v.dtret  < '2026-06-26'
-    AND v.cdfild IN (1,2,7,8,9,12,13,20)
+    AND v.dtret BETWEEN {startDate} AND {endDate}
+    AND v.cdfild IN ({branchList})
     AND v.tpformafarma <> 6
-    AND NOT EXISTS (
-        SELECT 1
-        FROM fc12500 prd
-        WHERE 1=1
-            AND prd.nrrqu = v.nrrqu
-            AND prd.cdfil = v.cdfil
-            AND prd.cdetapa = '08'
-    );
 `.trim();
 
 export function buildRecebimentoErpQuery(
@@ -48,7 +45,7 @@ export function buildRecebimentoErpQuery(
 
   return RECEBIMENTO_ERP_QUERY.replace("{startDate}", rangeStart)
     .replace("{endDate}", rangeEnd)
-    .replace("AND v.cdfild IN (12)", `AND v.cdfild IN (${branchList || DEFAULT_CDFILD})`);
+    .replace("{branchList}", branchList || DEFAULT_CDFILD);
 }
 
 const STATUS_BY_STEP_OPERATION = {
