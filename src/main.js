@@ -7,7 +7,6 @@ import {
   formatDateInput,
   normalizeErpRows,
 } from "./erpRecebimento.js";
-import { ALLOWED_DELAY_HOURS, DEFAULT_DELAY_HOURS, normalizeDelayHours } from "./delaySettings.js";
 
 const app = document.querySelector("#app");
 const today = new Date();
@@ -63,15 +62,6 @@ function iconAlert() {
   `;
 }
 
-function iconGear() {
-  return `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="3"></circle>
-      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 .9-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5.9h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path>
-    </svg>
-  `;
-}
-
 function iconFilter() {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -104,19 +94,18 @@ app.innerHTML = `
             <img class="system-icon" src="${logoPharmesUrl}" alt="" />
           </span>
           <div class="headline">
-            <h1>Controle de Recebimento</h1>
-            <p>Monitoramento por data de retirada na filial destino.</p>
+            <h1 id="pageTitle">Controle de Recebimento</h1>
+            <p id="pageSubtitle">Monitoramento por data de retirada na filial destino.</p>
           </div>
         </div>
 
         <div class="topbar-actions">
-          <button class="btn btn-outline btn-settings" id="settingsButton" type="button" aria-haspopup="dialog">
-            <span class="btn-icon">${iconGear()}</span>
-            <span>Configurações</span>
-          </button>
           <button class="btn btn-outline" id="filtersToggle" type="button" aria-expanded="false" aria-controls="filtersPanel">
             <span class="btn-icon">${iconFilter()}</span>
             <span>Filtros</span>
+          </button>
+          <button class="btn btn-outline btn-toggle" id="lateToggleButton" type="button" aria-pressed="false">
+            <span>Atrasados</span>
           </button>
           <button class="btn btn-primary" id="exportButton" type="button">
             <span class="btn-icon">${iconExport()}</span>
@@ -126,44 +115,6 @@ app.innerHTML = `
       </header>
 
       <p class="data-status" id="dataStatus" role="status" aria-live="polite" hidden></p>
-
-      <dialog class="settings-modal" id="settingsModal" aria-labelledby="settingsTitle">
-        <form class="settings-panel" id="settingsForm" method="dialog">
-          <div class="settings-head">
-            <span class="settings-icon" aria-hidden="true">${iconGear()}</span>
-            <div>
-              <h2 id="settingsTitle">Configurações gerais</h2>
-              <p>Parâmetros que controlam a lógica operacional do sistema.</p>
-            </div>
-          </div>
-
-          <fieldset class="settings-fieldset">
-            <legend>Prazo para considerar a requisição atrasada</legend>
-            <p class="settings-current" id="settingsCurrent">Valor atual: 22 horas</p>
-            <div class="delay-options" id="delayOptions">
-              ${ALLOWED_DELAY_HOURS.map(
-                (hours) => `
-                  <label class="delay-option">
-                    <input type="radio" name="delayHours" value="${hours}" />
-                    <span>
-                      <strong>${hours} horas</strong>
-                      <small>${formatDelayDescription(hours)}</small>
-                    </span>
-                  </label>
-                `,
-              ).join("")}
-            </div>
-          </fieldset>
-
-          <p class="settings-feedback" id="settingsFeedback" role="status" aria-live="polite" hidden></p>
-
-          <div class="settings-actions">
-            <button class="btn btn-outline" id="settingsCancel" type="button">Cancelar</button>
-            <button class="btn btn-primary" type="submit">Salvar configuração</button>
-          </div>
-        </form>
-      </dialog>
-
       <section class="filters-panel" id="filtersPanel" aria-label="Filtros por filial destino e período" hidden>
         <form class="filters-grid" id="filtersForm">
           <label class="field">
@@ -203,7 +154,7 @@ app.innerHTML = `
         </form>
       </section>
 
-      <section class="summary-grid" id="resumo" aria-label="Resumo de status">
+      <section class="summary-grid" id="resumo" data-view="standard" aria-label="Resumo de status">
         <article class="summary-card summary-total">
           <span class="summary-label">Total monitorado</span>
           <strong class="summary-value" id="countTotal">0</strong>
@@ -224,14 +175,9 @@ app.innerHTML = `
           <strong class="summary-value" id="countPendentes">0</strong>
           <small>Entrada na logística</small>
         </article>
-        <article class="summary-card status-late">
-          <span class="summary-label">Atrasados</span>
-          <strong class="summary-value" id="countAtrasados">0</strong>
-          <small>Sem PCP de saída após o prazo</small>
-        </article>
       </section>
 
-      <section class="kanban" id="kanban" aria-label="Requisições por status de recebimento">
+      <section class="kanban" id="kanban" data-view="standard" aria-label="Requisições por status de recebimento">
         <article class="column column-a-receber">
           <div class="column-head">
             <div>
@@ -280,21 +226,102 @@ app.innerHTML = `
           </button>
         </article>
 
-        <article class="column column-atrasados">
-          <div class="column-head">
-            <div>
-              <span class="column-icon" aria-hidden="true">${iconAlert()}</span>
-              <h3>Atrasados</h3>
+      </section>
+
+      <section class="late-dashboard" id="lateDashboard" data-view="late" hidden aria-label="Painel de atrasados">
+        <section class="summary-grid late-summary-grid" id="lateResumo" aria-label="Resumo de atrasados">
+          <article class="summary-card summary-total late-total">
+            <span class="summary-label">Total atrasados</span>
+            <strong class="summary-value" id="lateCountTotal">0</strong>
+            <small>Registros atrasados no recorte atual</small>
+          </article>
+          <article class="summary-card late-window late-window-1200">
+            <span class="summary-label">12:00</span>
+            <strong class="summary-value" id="lateCount1200">0</strong>
+            <small>Fila das 12:00</small>
+          </article>
+          <article class="summary-card late-window late-window-1600">
+            <span class="summary-label">16:00</span>
+            <strong class="summary-value" id="lateCount1600">0</strong>
+            <small>Fila das 16:00</small>
+          </article>
+          <article class="summary-card late-window late-window-1800">
+            <span class="summary-label">18:00</span>
+            <strong class="summary-value" id="lateCount1800">0</strong>
+            <small>Fila das 18:00</small>
+          </article>
+          <article class="summary-card late-window late-window-1900">
+            <span class="summary-label">19:00</span>
+            <strong class="summary-value" id="lateCount1900">0</strong>
+            <small>Fila das 19:00</small>
+          </article>
+        </section>
+
+        <section class="kanban late-kanban" id="lateKanban" aria-label="Requisições atrasadas por horário">
+          <article class="column column-late">
+            <div class="column-head">
+              <div>
+                <span class="column-icon" aria-hidden="true">${iconClock()}</span>
+                <h3>12:00</h3>
+              </div>
+              <span class="badge badge-danger" id="lateBadge1200">0</span>
             </div>
-            <span class="badge badge-danger" id="badgeAtrasados">0</span>
-          </div>
-          <div class="column-body" id="col-atrasados"></div>
-          <button class="column-footer" type="button" data-status="atrasados" aria-expanded="false">
-            <span class="column-footer-label">Ver todos</span>
-            <span class="column-footer-count">(0)</span>
-            <span class="column-footer-icon" aria-hidden="true">›</span>
-          </button>
-        </article>
+            <div class="column-body" id="late-col-1200"></div>
+            <button class="column-footer" type="button" data-status="late-12:00" aria-expanded="false">
+              <span class="column-footer-label">Ver todos</span>
+              <span class="column-footer-count">(0)</span>
+              <span class="column-footer-icon" aria-hidden="true">›</span>
+            </button>
+          </article>
+
+          <article class="column column-late">
+            <div class="column-head">
+              <div>
+                <span class="column-icon" aria-hidden="true">${iconClock()}</span>
+                <h3>16:00</h3>
+              </div>
+              <span class="badge badge-danger" id="lateBadge1600">0</span>
+            </div>
+            <div class="column-body" id="late-col-1600"></div>
+            <button class="column-footer" type="button" data-status="late-16:00" aria-expanded="false">
+              <span class="column-footer-label">Ver todos</span>
+              <span class="column-footer-count">(0)</span>
+              <span class="column-footer-icon" aria-hidden="true">›</span>
+            </button>
+          </article>
+
+          <article class="column column-late">
+            <div class="column-head">
+              <div>
+                <span class="column-icon" aria-hidden="true">${iconClock()}</span>
+                <h3>18:00</h3>
+              </div>
+              <span class="badge badge-danger" id="lateBadge1800">0</span>
+            </div>
+            <div class="column-body" id="late-col-1800"></div>
+            <button class="column-footer" type="button" data-status="late-18:00" aria-expanded="false">
+              <span class="column-footer-label">Ver todos</span>
+              <span class="column-footer-count">(0)</span>
+              <span class="column-footer-icon" aria-hidden="true">›</span>
+            </button>
+          </article>
+
+          <article class="column column-late">
+            <div class="column-head">
+              <div>
+                <span class="column-icon" aria-hidden="true">${iconClock()}</span>
+                <h3>19:00</h3>
+              </div>
+              <span class="badge badge-danger" id="lateBadge1900">0</span>
+            </div>
+            <div class="column-body" id="late-col-1900"></div>
+            <button class="column-footer" type="button" data-status="late-19:00" aria-expanded="false">
+              <span class="column-footer-label">Ver todos</span>
+              <span class="column-footer-count">(0)</span>
+              <span class="column-footer-icon" aria-hidden="true">›</span>
+            </button>
+          </article>
+        </section>
       </section>
     </main>
   </div>
@@ -327,10 +354,6 @@ app.innerHTML = `
             <span class="formula-withdrawal-time"></span>
           </span>
         </div>
-        <div class="formula-row formula-late-row">
-          <span class="formula-key">Limite</span>
-          <span class="formula-value formula-deadline"></span>
-        </div>
         <div class="formula-row">
           <span class="formula-key">Origem</span>
           <span class="formula-value formula-origin"></span>
@@ -353,24 +376,41 @@ app.innerHTML = `
 `;
 
 const collapsedLimit = 3;
-const STATUS_KEYS = ["a-receber", "recebido", "pendentes", "atrasados"];
+const STATUS_KEYS = ["a-receber", "recebido", "pendentes"];
+const LATE_BUCKET_KEYS = ["12:00", "16:00", "18:00", "19:00"];
 const expandedColumns = {
   "a-receber": false,
   recebido: false,
   pendentes: false,
-  atrasados: false,
+};
+const expandedLateColumns = {
+  "12:00": false,
+  "16:00": false,
+  "18:00": false,
+  "19:00": false,
 };
 
 let formulas = [];
 let isLoading = false;
 let dataStatusTimer = null;
-let currentDelayHours = DEFAULT_DELAY_HOURS;
+let routeTransitionTimer = null;
+const ROUTES = {
+  standard: "/",
+  late: "/atrasados",
+};
+let currentRoute = getRouteFromLocation();
 
 const columns = {
   "a-receber": document.querySelector("#col-a-receber"),
   recebido: document.querySelector("#col-recebido"),
   pendentes: document.querySelector("#col-pendentes"),
-  atrasados: document.querySelector("#col-atrasados"),
+};
+
+const lateColumns = {
+  "12:00": document.querySelector("#late-col-1200"),
+  "16:00": document.querySelector("#late-col-1600"),
+  "18:00": document.querySelector("#late-col-1800"),
+  "19:00": document.querySelector("#late-col-1900"),
 };
 
 const statusMeta = {
@@ -386,9 +426,24 @@ const statusMeta = {
     metric: document.querySelector("#countPendentes"),
     badge: document.querySelector("#badgePendentes"),
   },
-  atrasados: {
-    metric: document.querySelector("#countAtrasados"),
-    badge: document.querySelector("#badgeAtrasados"),
+};
+
+const lateStatusMeta = {
+  "12:00": {
+    metric: document.querySelector("#lateCount1200"),
+    badge: document.querySelector("#lateBadge1200"),
+  },
+  "16:00": {
+    metric: document.querySelector("#lateCount1600"),
+    badge: document.querySelector("#lateBadge1600"),
+  },
+  "18:00": {
+    metric: document.querySelector("#lateCount1800"),
+    badge: document.querySelector("#lateBadge1800"),
+  },
+  "19:00": {
+    metric: document.querySelector("#lateCount1900"),
+    badge: document.querySelector("#lateBadge1900"),
   },
 };
 
@@ -396,28 +451,28 @@ const statusIcons = {
   "a-receber": iconTruck,
   recebido: iconCheck,
   pendentes: iconClock,
-  atrasados: iconAlert,
 };
 
 const template = document.querySelector("#formula-template");
 const totalCount = document.querySelector("#countTotal");
+const lateTotalCount = document.querySelector("#lateCountTotal");
+const pageTitle = document.querySelector("#pageTitle");
+const pageSubtitle = document.querySelector("#pageSubtitle");
 const dataStatus = document.querySelector("#dataStatus");
 const filtersToggle = document.querySelector("#filtersToggle");
+const lateToggleButton = document.querySelector("#lateToggleButton");
+const workspace = document.querySelector(".workspace");
 const filtersPanel = document.querySelector("#filtersPanel");
 const filtersForm = document.querySelector("#filtersForm");
 const branchSelect = document.querySelector("#branchSelect");
 const stageSelect = document.querySelector("#stageSelect");
 const requestSearch = document.querySelector("#requestSearch");
 const exportButton = document.querySelector("#exportButton");
-const settingsButton = document.querySelector("#settingsButton");
-const settingsModal = document.querySelector("#settingsModal");
-const settingsForm = document.querySelector("#settingsForm");
-const settingsCancel = document.querySelector("#settingsCancel");
-const settingsCurrent = document.querySelector("#settingsCurrent");
-const settingsFeedback = document.querySelector("#settingsFeedback");
 const systemIcon = document.querySelector(".system-icon");
 const startDateInput = document.querySelector("#startDate");
 const endDateInput = document.querySelector("#endDate");
+const standardViews = document.querySelectorAll('[data-view="standard"]');
+const lateViews = document.querySelectorAll('[data-view="late"]');
 systemIcon.addEventListener("error", () => {
   systemIcon.hidden = true;
   systemIcon.closest(".system-icon-frame")?.classList.add("is-empty");
@@ -426,7 +481,6 @@ systemIcon.addEventListener("error", () => {
 populateBranchFilter();
 startDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.startOffsetDays));
 endDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
-syncSettingsUi();
 
 function populateBranchFilter() {
   branchSelect.innerHTML = [
@@ -452,64 +506,70 @@ function setDataStatus(state, message, { autoHide = false } = {}) {
   }
 }
 
-async function loadSettings() {
-  try {
-    const response = await fetch("/api/configuracao", {
-      headers: {
-        Accept: "application/json",
-      },
-    });
+function getRouteFromLocation() {
+  return window.location.pathname === ROUTES.late ? ROUTES.late : ROUTES.standard;
+}
 
-    if (!response.ok) {
-      throw new Error(`Falha ao consultar configuracao: ${response.status}`);
+function isLateRoute(route = currentRoute) {
+  return route === ROUTES.late;
+}
+
+function syncRouteUi() {
+  const lateView = isLateRoute();
+  workspace.dataset.mode = lateView ? "late" : "standard";
+  standardViews.forEach((view) => {
+    view.classList.toggle("is-exiting", lateView);
+    view.classList.toggle("is-active", !lateView);
+    view.hidden = false;
+  });
+  lateViews.forEach((view) => {
+    view.classList.toggle("is-entering", lateView);
+    view.classList.toggle("is-active", lateView);
+    view.hidden = false;
+  });
+  lateToggleButton.setAttribute("aria-pressed", String(lateView));
+  lateToggleButton.classList.toggle("is-active", lateView);
+  lateToggleButton.textContent = lateView ? "Recebimento" : "Atrasados";
+  pageTitle.textContent = lateView
+    ? "Controle de requisições atrasadas"
+    : "Controle de Recebimento";
+  pageSubtitle.textContent = lateView
+    ? "Monitoramento por horario de retirada na filial destino."
+    : "Monitoramento por data de retirada na filial destino.";
+  document.title = lateView
+    ? "Controle de Recebimento | Atrasados"
+    : "Controle de Recebimento de Fórmulas";
+}
+
+function navigateToRoute(nextRoute, { replace = false } = {}) {
+  if (nextRoute === currentRoute) {
+    return;
+  }
+
+  if (routeTransitionTimer) {
+    window.clearTimeout(routeTransitionTimer);
+  }
+
+  workspace.classList.add("is-transitioning");
+  workspace.dataset.nextMode = nextRoute === ROUTES.late ? "late" : "standard";
+  routeTransitionTimer = window.setTimeout(() => {
+    currentRoute = nextRoute;
+    routeTransitionTimer = null;
+    workspace.dataset.nextMode = "";
+
+    if (replace) {
+      history.replaceState({}, "", nextRoute);
+    } else {
+      history.pushState({}, "", nextRoute);
     }
 
-    const payload = await response.json();
-    currentDelayHours = normalizeDelayHours(payload?.prazoAtrasoHoras);
-    syncSettingsUi();
-  } catch {
-    currentDelayHours = DEFAULT_DELAY_HOURS;
-    syncSettingsUi();
-  }
-}
+    syncRouteUi();
+    render();
 
-async function saveSettings(delayHours) {
-  const response = await fetch("/api/configuracao", {
-    method: "PUT",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      prazoAtrasoHoras: delayHours,
-    }),
-  });
-
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(payload?.error || `Falha ao salvar configuracao: ${response.status}`);
-  }
-
-  currentDelayHours = normalizeDelayHours(payload?.prazoAtrasoHoras);
-  syncSettingsUi();
-}
-
-function syncSettingsUi() {
-  settingsCurrent.textContent = `Valor atual: ${currentDelayHours} horas`;
-  settingsFeedback.hidden = true;
-
-  settingsForm.querySelectorAll('input[name="delayHours"]').forEach((input) => {
-    input.checked = Number(input.value) === currentDelayHours;
-  });
-}
-
-function formatDelayDescription(hours) {
-  if (hours === 22) return "22 horas após a data prevista";
-  if (hours === 48) return "2 dias após a data prevista";
-  if (hours === 72) return "3 dias após a data prevista";
-
-  return "32 horas após a data prevista";
+    requestAnimationFrame(() => {
+      workspace.classList.remove("is-transitioning");
+    });
+  }, 180);
 }
 
 async function loadRealData() {
@@ -520,13 +580,23 @@ async function loadRealData() {
   isLoading = true;
   setDataStatus("loading", "Sincronizando...");
 
+  if (import.meta.env.DEV) {
+    formulas = normalizeErpRows(createMockErpRows(today));
+    isLoading = false;
+    setDataStatus("fallback", "Ambiente local usando dados simulados para visualização.", {
+      autoHide: true,
+    });
+    render();
+    return;
+  }
+
   const cdfild = branchSelect.value;
   const startDate = startDateInput.value || isoToday;
   const endDate = endDateInput.value || isoToday;
 
   try {
     const response = await fetch(
-      `/api/recebimento?cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}&delayHours=${encodeURIComponent(currentDelayHours)}`,
+      `/api/recebimento?cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}`,
       {
         headers: {
           Accept: "application/json",
@@ -547,26 +617,18 @@ async function loadRealData() {
     formulas = normalizeErpRows(payload.rows);
     setDataStatus("ready", "Sincronizado", { autoHide: true });
   } catch (error) {
-    if (import.meta.env.DEV) {
-      formulas = normalizeErpRows(createMockErpRows(today));
-      setDataStatus(
-        "fallback",
-        "API indisponível no ambiente local. Usando dados simulados enquanto a conexão real não responde.",
-      );
-    } else {
-      formulas = [];
-      setDataStatus(
-        "error",
-        "Falha ao carregar dados reais do banco. Verifique as variáveis de ambiente e a rota /api/recebimento.",
-      );
-    }
+    formulas = [];
+    setDataStatus(
+      "error",
+      "Falha ao carregar dados reais do banco. Verifique as variáveis de ambiente e a rota /api/recebimento.",
+    );
   }
 
   isLoading = false;
   render();
 }
 
-function renderCard(formula) {
+function renderCard(formula, { hideStatusChip = false, forceAlertIcon = false } = {}) {
   const node = template.content.cloneNode(true);
   const card = node.querySelector(".formula-card");
   const toggle = node.querySelector(".formula-top");
@@ -576,28 +638,32 @@ function renderCard(formula) {
 
   card.dataset.status = formula.status;
   toggle.setAttribute("aria-label", `Expandir requisicao ${formula.request}`);
-  icon.innerHTML = statusIcons[formula.status]();
-  icon.classList.add(`icon-${formula.status}`);
+  icon.innerHTML = forceAlertIcon ? iconAlert() : statusIcons[formula.status]();
+  icon.classList.add(forceAlertIcon ? "icon-late-alert" : `icon-${formula.status}`);
   node.querySelector(".formula-meta").textContent = `Requisição ${formula.request}`;
   node.querySelector(".formula-title").textContent = formula.title;
   node.querySelector(".formula-entry-date").textContent = formatDisplayDate(formula.dtentr);
   node.querySelector(".formula-entry-time").textContent = formula.hrcad || "--:--";
   node.querySelector(".formula-withdrawal-date").textContent = formatDisplayDate(formula.dtret);
   node.querySelector(".formula-withdrawal-time").textContent = formula.hrret || "--:--";
-  node.querySelector(".formula-deadline").textContent = formatDeadline(formula);
   node.querySelector(".formula-origin").textContent = formatBranch("Origem", formula.cdfil);
   node.querySelector(".formula-destination").textContent = formatBranch("Destino", formula.cdfild);
   node.querySelector(".formula-stage").textContent = formula.stepLabel;
   node.querySelector(".formula-operation").textContent = formula.operationLabel;
 
-  chip.textContent = formula.statusLabel;
-  chip.classList.add(
-    formula.status === "a-receber"
-      ? "badge-warn"
-      : formula.status === "recebido"
-        ? "badge-success"
-        : "badge-danger",
-  );
+  if (hideStatusChip) {
+    chip.remove();
+    toggle.dataset.hideStatusChip = "true";
+  } else {
+    chip.textContent = formula.statusLabel;
+    chip.classList.add(
+      formula.status === "a-receber"
+        ? "badge-warn"
+        : formula.status === "recebido"
+          ? "badge-success"
+          : "badge-danger",
+    );
+  }
   toggle.addEventListener("click", () => {
     const isExpanded = toggle.getAttribute("aria-expanded") === "true";
 
@@ -617,17 +683,21 @@ function renderEmptyState(column, status) {
   const empty = document.createElement("p");
   empty.className = "empty-state";
   empty.textContent =
-    status === "atrasados"
-      ? "Nenhuma requisição atrasada hoje para o filtro selecionado."
-      : status === "pendentes"
-      ? "Nenhuma pendência no recorte atual."
-      : "Nenhuma requisição encontrada para esta etapa.";
+    status === "pendentes" ? "Nenhuma pendência no recorte atual." : "Nenhuma requisição encontrada para esta etapa.";
   column.appendChild(empty);
 }
 
 function render() {
   syncStageOptions();
   const filteredFormulas = getFilteredFormulas();
+  const lateFormulas = getLateFormulas(filteredFormulas);
+
+  renderStandardDashboard(filteredFormulas);
+  renderLateDashboard(lateFormulas);
+  syncViewVisibility();
+}
+
+function renderStandardDashboard(filteredFormulas) {
   const grouped = filteredFormulas.reduce(
     (acc, formula) => {
       const status = getRenderStatus(formula);
@@ -667,6 +737,73 @@ function render() {
   totalCount.textContent = formatNumber(filteredFormulas.length);
 }
 
+function renderLateDashboard(lateFormulas) {
+  const displayLateFormulas = lateFormulas.filter((formula) => getLateBucket(formula) !== "19:00");
+  const grouped = displayLateFormulas.reduce(
+    (acc, formula) => {
+      const bucket = getLateBucket(formula);
+
+      if (bucket in acc) {
+        acc[bucket] += 1;
+      }
+      return acc;
+    },
+    Object.fromEntries(LATE_BUCKET_KEYS.map((bucket) => [bucket, 0])),
+  );
+
+  Object.values(lateColumns).forEach((column) => {
+    column.innerHTML = "";
+  });
+
+  Object.entries(lateColumns).forEach(([bucket, column]) => {
+    const formulasByBucket =
+      bucket === "19:00"
+        ? []
+        : displayLateFormulas.filter((formula) => getLateBucket(formula) === bucket);
+    const visibleFormulas = expandedLateColumns[bucket]
+      ? formulasByBucket
+      : formulasByBucket.slice(0, collapsedLimit);
+    const volumeState = getLateVolumeState(formulasByBucket.length);
+
+    lateStatusMeta[bucket].metric.textContent = formatNumber(grouped[bucket]);
+    lateStatusMeta[bucket].badge.textContent = formatNumber(grouped[bucket]);
+    column.dataset.volume = volumeState;
+    column.closest(".column-late")?.setAttribute("data-volume", volumeState);
+
+    if (visibleFormulas.length === 0) {
+      renderLateEmptyState(column, bucket);
+    } else {
+      visibleFormulas.forEach((formula) => {
+        const card = renderCard(formula, { hideStatusChip: true, forceAlertIcon: true });
+        column.appendChild(card);
+      });
+    }
+
+    updateColumnFooter(`late-${bucket}`, formulasByBucket.length, expandedLateColumns);
+  });
+
+  lateTotalCount.textContent = formatNumber(displayLateFormulas.length);
+}
+
+function renderLateEmptyState(column, bucket) {
+  const empty = document.createElement("p");
+  empty.className = "empty-state";
+  empty.textContent = `Nenhuma requisição atrasada para a faixa ${bucket}.`;
+  column.appendChild(empty);
+}
+
+function getLateVolumeState(total) {
+  if (total === 0) {
+    return "none";
+  }
+
+  if (total <= 5) {
+    return "low";
+  }
+
+  return "high";
+}
+
 function getFilteredFormulas() {
   const stage = stageSelect.value;
   const requestQuery = normalizeSearch(requestSearch.value);
@@ -680,20 +817,27 @@ function getFilteredFormulas() {
   });
 }
 
-function getRenderStatus(formula) {
-  if (formula.status !== "atrasados") {
-    return formula.status;
+function getLateFormulas(filteredFormulas = getFilteredFormulas()) {
+  return filteredFormulas.filter((formula) => formula.status !== "recebido");
+}
+
+function getLateBucket(formula) {
+  const sourceTime = formula.hrret || formula.hrcad || "";
+  const hour = Number.parseInt(String(sourceTime).slice(0, 2), 10);
+
+  if (!Number.isFinite(hour)) {
+    return "19:00";
   }
 
-  return isLateToday(formula) ? "atrasados" : "__hidden__";
+  if (hour < 13) return "12:00";
+  if (hour < 17) return "16:00";
+  if (hour < 19) return "18:00";
+
+  return "19:00";
 }
 
-function isLateToday(formula) {
-  return getDateKey(formula.dataLimiteAtraso) === isoToday;
-}
-
-function getDateKey(value) {
-  return String(value ?? "").slice(0, 10);
+function getRenderStatus(formula) {
+  return formula.status;
 }
 
 function getAvailableFormulas({ ignoreStage = false } = {}) {
@@ -758,6 +902,14 @@ function syncStageOptions() {
   }
 }
 
+function syncLateToggleUi() {
+  syncRouteUi();
+}
+
+function syncViewVisibility() {
+  syncRouteUi();
+}
+
 function formatDisplayDate(dateValue) {
   if (!dateValue) {
     return "--/--/----";
@@ -770,18 +922,6 @@ function formatDisplayDate(dateValue) {
   }
 
   return `${day}/${month}/${year}`;
-}
-
-function formatDeadline(formula) {
-  if (formula.dataLimiteAtraso) {
-    const value = String(formula.dataLimiteAtraso);
-    const date = formatDisplayDate(value);
-    const timeMatch = value.match(/(?:T|\s)(\d{2}:\d{2})/);
-
-    return timeMatch ? `${date} ${timeMatch[1]}` : `${date} 00:00`;
-  }
-
-  return `${formatDisplayDate(formula.dtret)} + ${formula.prazoAtrasoHoras || currentDelayHours}h`;
 }
 
 function formatNumber(value) {
@@ -808,9 +948,6 @@ function buildExportCsv(rows) {
     ["Hora retirada", (formula) => formula.hrret || ""],
     ["Etapa", (formula) => formula.stepLabel],
     ["Operação", (formula) => formula.operationLabel],
-    ["Atrasada", (formula) => (formula.atrasada ? "Sim" : "Não")],
-    ["Prazo atraso horas", (formula) => formula.prazoAtrasoHoras || currentDelayHours],
-    ["Data limite atraso", (formula) => formatDeadline(formula)],
   ];
   const header = columns.map(([label]) => escapeCsvCell(label)).join(";");
   const lines = rows.map((formula) =>
@@ -830,10 +967,13 @@ function escapeCsvCell(value) {
   return text;
 }
 
-function updateColumnFooter(status, total) {
+function updateColumnFooter(status, total, expandedMap = expandedColumns) {
   const button = document.querySelector(`.column-footer[data-status="${status}"]`);
+  if (!button) {
+    return;
+  }
   const remaining = Math.max(total - collapsedLimit, 0);
-  const isExpanded = expandedColumns[status];
+  const isExpanded = expandedMap[status];
 
   button.hidden = remaining === 0;
   button.setAttribute("aria-expanded", String(isExpanded));
@@ -849,6 +989,16 @@ filtersToggle.addEventListener("click", () => {
   const shouldOpen = filtersPanel.hidden;
   filtersPanel.hidden = !shouldOpen;
   filtersToggle.setAttribute("aria-expanded", String(shouldOpen));
+});
+
+lateToggleButton.addEventListener("click", () => {
+  navigateToRoute(isLateRoute() ? ROUTES.standard : ROUTES.late);
+});
+
+window.addEventListener("popstate", () => {
+  currentRoute = getRouteFromLocation();
+  syncRouteUi();
+  render();
 });
 
 filtersForm.addEventListener("submit", (event) => {
@@ -891,54 +1041,18 @@ requestSearch.addEventListener("change", () => {
 document.querySelectorAll(".column-footer").forEach((button) => {
   button.addEventListener("click", () => {
     const { status } = button.dataset;
-    expandedColumns[status] = !expandedColumns[status];
+    if (status.startsWith("late-")) {
+      expandedLateColumns[status.slice(5)] = !expandedLateColumns[status.slice(5)];
+    } else {
+      expandedColumns[status] = !expandedColumns[status];
+    }
     render();
   });
 });
 
-settingsButton.addEventListener("click", () => {
-  syncSettingsUi();
-  settingsModal.showModal();
-});
-
-settingsCancel.addEventListener("click", () => {
-  settingsModal.close();
-});
-
-settingsModal.addEventListener("click", (event) => {
-  if (event.target === settingsModal) {
-    settingsModal.close();
-  }
-});
-
-settingsForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formData = new FormData(settingsForm);
-  const delayHours = normalizeDelayHours(formData.get("delayHours"));
-  const submitButton = settingsForm.querySelector('button[type="submit"]');
-
-  submitButton.disabled = true;
-  settingsFeedback.hidden = false;
-  settingsFeedback.dataset.state = "loading";
-  settingsFeedback.textContent = "Salvando configuração...";
-
-  try {
-    await saveSettings(delayHours);
-    settingsFeedback.dataset.state = "success";
-    settingsFeedback.textContent = `Configuração salva: ${currentDelayHours} horas.`;
-    await loadRealData();
-    settingsModal.close();
-  } catch (error) {
-    settingsFeedback.dataset.state = "error";
-    settingsFeedback.textContent =
-      error instanceof Error ? error.message : "Falha ao salvar configuração.";
-  } finally {
-    submitButton.disabled = false;
-  }
-});
 
 exportButton.addEventListener("click", () => {
-  const rows = getVisibleFormulas();
+  const rows = isLateRoute() ? getLateFormulas() : getVisibleFormulas();
 
   if (rows.length === 0) {
     setDataStatus("fallback", "Não há registros no recorte atual para exportar.", {
@@ -969,6 +1083,5 @@ exportButton.addEventListener("click", () => {
 });
 
 render();
-loadSettings().finally(() => {
-  loadRealData();
-});
+syncLateToggleUi();
+loadRealData();

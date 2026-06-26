@@ -1,5 +1,3 @@
-import { DEFAULT_DELAY_HOURS, normalizeDelayHours } from "./delaySettings.js";
-
 export const DEFAULT_CDFILD = "12";
 
 export const ERP_WINDOW = {
@@ -16,33 +14,29 @@ SELECT
     v.dtentr,
     v.hrcad,
     v.dtret,
-    v.hrret,
-    v.cdfild,
-    p.cdetapa,
-    p.cdopera,
-    CASE
-        WHEN {deadlineExpression} <= CURRENT_TIMESTAMP
-            AND {missingLogisticsExitExpression}
-        THEN 1
-        ELSE 0
-    END AS atrasada,
-    {delayHours} AS prazo_atraso_horas,
-    {deadlineExpression} AS data_limite_atraso
+    EXTRACT (HOUR FROM v.hrret) hrret,
+    v.cdfild
 FROM
     fc12100 v
-LEFT JOIN
-    fc12500 p ON p.nrrqu = v.nrrqu
-    AND p.cdfil  = v.cdfil
-    AND p.serier = v.serier
-    AND p.cdetapa IN ('08','10')
+
 WHERE 1=1
-    AND v.dtret BETWEEN {startDate} AND {endDate}
-    AND v.cdfild IN (12)
+    AND v.dtret >= '2026-06-01'
+    AND v.dtret  < '2026-06-26'
+    AND v.cdfild IN (1,2,7,8,9,12,13,20)
+    AND v.tpformafarma <> 6
+    AND NOT EXISTS (
+        SELECT 1
+        FROM fc12500 prd
+        WHERE 1=1
+            AND prd.nrrqu = v.nrrqu
+            AND prd.cdfil = v.cdfil
+            AND prd.cdetapa = '08'
+    );
 `.trim();
 
 export function buildRecebimentoErpQuery(
   cdfilds = [DEFAULT_CDFILD],
-  { startDate, endDate, delayHours = DEFAULT_DELAY_HOURS } = {},
+  { startDate, endDate } = {},
 ) {
   const branchList = cdfilds
     .map((cdfild) => Number.parseInt(cdfild, 10))
@@ -51,30 +45,16 @@ export function buildRecebimentoErpQuery(
 
   const rangeStart = startDate ? toFirebirdDateLiteral(startDate) : "current_date - 1";
   const rangeEnd = endDate ? toFirebirdDateLiteral(endDate) : "current_date + 5";
-  const normalizedDelayHours = normalizeDelayHours(delayHours);
-  const deadlineExpression = `DATEADD(${normalizedDelayHours} HOUR TO CAST(v.dtret AS TIMESTAMP))`;
-  const missingLogisticsExitExpression = `NOT EXISTS (
-            SELECT 1
-            FROM fc12500 saida_logistica
-            WHERE saida_logistica.nrrqu = v.nrrqu
-                AND saida_logistica.cdfil = v.cdfil
-                AND saida_logistica.serier = v.serier
-                AND saida_logistica.cdetapa = '08'
-                AND saida_logistica.cdopera = 2
-        )`;
 
   return RECEBIMENTO_ERP_QUERY.replace("{startDate}", rangeStart)
     .replace("{endDate}", rangeEnd)
-    .replaceAll("{delayHours}", String(normalizedDelayHours))
-    .replaceAll("{deadlineExpression}", deadlineExpression)
-    .replaceAll("{missingLogisticsExitExpression}", missingLogisticsExitExpression)
     .replace("AND v.cdfild IN (12)", `AND v.cdfild IN (${branchList || DEFAULT_CDFILD})`);
 }
 
 const STATUS_BY_STEP_OPERATION = {
   "00:0": {
-    status: "atrasados",
-    statusLabel: "Atrasado",
+    status: "pendentes",
+    statusLabel: "Pendente",
   },
   "08:1": {
     status: "pendentes",
@@ -92,7 +72,6 @@ const STATUS_BY_STEP_OPERATION = {
 
 const STATUS_PRIORITY = {
   pendentes: 1,
-  atrasados: 2,
   "a-receber": 2,
   recebido: 3,
 };
@@ -106,13 +85,6 @@ const OPERATION_LABELS = {
   1: "Entrada",
   2: "Saida",
 };
-
-export function getStatusFromErp(row) {
-  const cdetapa = normalizeStep(getField(row, "cdetapa"));
-  const cdopera = normalizeOperation(getField(row, "cdopera"));
-
-  return STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`] ?? null;
-}
 
 export function normalizeErpRows(rows) {
   const normalizedRows = rows
@@ -129,56 +101,346 @@ export function getDestinationBranches(rows) {
 }
 
 export function createMockErpRows(referenceDate = new Date()) {
-  const rows = [
-    ["12", "22090", "1", "Daniela Martins", -4, "08:00", -2, "10:00", "12", "08", 1, 1],
-    ["12", "22091", "1", "Ana Silva", -2, "08:20", 0, "10:40", "12", "08", 2, 0],
-    ["12", "22092", "1", "Marcos Souza", -1, "09:10", 0, "11:25", "12", "08", 1],
-    ["12", "22093", "2", "Claudia Rocha", -1, "10:30", 1, "12:10", "12", "10", 1],
-    ["7", "22094", "1", "Renata Alves", 0, "08:45", 1, "13:20", "12", "08", 2],
-    ["7", "22095", "1", "Paulo Roberto", 0, "11:15", 2, "09:30", "12", "08", 1],
-    ["8", "22096", "1", "Juliana Martins", 0, "13:35", 2, "15:00", "12", "10", 1],
-    ["8", "22097", "2", "Luciana Costa", 1, "09:50", 3, "10:30", "12", "08", 2],
-    ["9", "22098", "1", "Sofia Almeida", 1, "12:05", 3, "14:45", "12", "08", 2],
-    ["9", "22099", "1", "Eduardo Lima", 1, "14:10", 4, "16:15", "12", "08", 1],
-    ["10", "22100", "1", "Bianca Torres", 2, "08:25", 4, "09:55", "12", "10", 1],
-    ["10", "22101", "2", "Helena Rocha", 2, "10:40", 5, "11:40", "12", "08", 2],
-    ["11", "22102", "1", "Rafael Moreira", 3, "15:20", 5, "17:00", "12", "08", 1],
-    ["11", "22103", "1", "Marina Duarte", 3, "09:05", 5, "13:35", "14", "08", 2],
-    ["12", "22104", "2", "Carlos Henrique", 4, "11:55", 5, "15:25", "14", "10", 1],
-    ["13", "22105", "1", "Beatriz Nunes", 4, "08:00", 6, "10:10", "15", "08", 1],
+  return [
+    {
+      cdfil: "12",
+      nrrqu: "22090",
+      serier: "1",
+      nomepa: "Daniela Martins",
+      dtentr: formatDateInput(addDays(referenceDate, -4)),
+      hrcad: "07:55",
+      dtret: formatDateInput(addDays(referenceDate, -2)),
+      hrret: "10:00",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 1,
+    },
+    {
+      cdfil: "12",
+      nrrqu: "22091",
+      serier: "1",
+      nomepa: "Ana Silva",
+      dtentr: formatDateInput(addDays(referenceDate, -2)),
+      hrcad: "08:20",
+      dtret: formatDateInput(addDays(referenceDate, 0)),
+      hrret: "10:40",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "12",
+      nrrqu: "22092",
+      serier: "1",
+      nomepa: "Marcos Souza",
+      dtentr: formatDateInput(addDays(referenceDate, -1)),
+      hrcad: "09:10",
+      dtret: formatDateInput(addDays(referenceDate, 0)),
+      hrret: "11:25",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 1,
+    },
+    {
+      cdfil: "12",
+      nrrqu: "22093",
+      serier: "2",
+      nomepa: "Claudia Rocha",
+      dtentr: formatDateInput(addDays(referenceDate, -1)),
+      hrcad: "10:30",
+      dtret: formatDateInput(addDays(referenceDate, 1)),
+      hrret: "12:10",
+      cdfild: "12",
+      cdetapa: "10",
+      cdopera: 1,
+    },
+    {
+      cdfil: "7",
+      nrrqu: "22094",
+      serier: "1",
+      nomepa: "Renata Alves",
+      dtentr: formatDateInput(addDays(referenceDate, 0)),
+      hrcad: "08:45",
+      dtret: formatDateInput(addDays(referenceDate, 1)),
+      hrret: "13:20",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "7",
+      nrrqu: "22095",
+      serier: "1",
+      nomepa: "Paulo Roberto",
+      dtentr: formatDateInput(addDays(referenceDate, 0)),
+      hrcad: "11:15",
+      dtret: formatDateInput(addDays(referenceDate, 2)),
+      hrret: "09:30",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 1,
+    },
+    {
+      cdfil: "8",
+      nrrqu: "22096",
+      serier: "1",
+      nomepa: "Juliana Martins",
+      dtentr: formatDateInput(addDays(referenceDate, 0)),
+      hrcad: "13:35",
+      dtret: formatDateInput(addDays(referenceDate, 2)),
+      hrret: "15:00",
+      cdfild: "12",
+      cdetapa: "10",
+      cdopera: 1,
+    },
+    {
+      cdfil: "8",
+      nrrqu: "22097",
+      serier: "2",
+      nomepa: "Luciana Costa",
+      dtentr: formatDateInput(addDays(referenceDate, 1)),
+      hrcad: "09:50",
+      dtret: formatDateInput(addDays(referenceDate, 3)),
+      hrret: "10:30",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "9",
+      nrrqu: "22098",
+      serier: "1",
+      nomepa: "Sofia Almeida",
+      dtentr: formatDateInput(addDays(referenceDate, 1)),
+      hrcad: "12:05",
+      dtret: formatDateInput(addDays(referenceDate, 3)),
+      hrret: "14:45",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "9",
+      nrrqu: "22099",
+      serier: "1",
+      nomepa: "Eduardo Lima",
+      dtentr: formatDateInput(addDays(referenceDate, 1)),
+      hrcad: "14:10",
+      dtret: formatDateInput(addDays(referenceDate, 4)),
+      hrret: "16:15",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 1,
+    },
+    {
+      cdfil: "10",
+      nrrqu: "22100",
+      serier: "1",
+      nomepa: "Bianca Torres",
+      dtentr: formatDateInput(addDays(referenceDate, 2)),
+      hrcad: "08:25",
+      dtret: formatDateInput(addDays(referenceDate, 4)),
+      hrret: "09:55",
+      cdfild: "12",
+      cdetapa: "10",
+      cdopera: 1,
+    },
+    {
+      cdfil: "10",
+      nrrqu: "22101",
+      serier: "2",
+      nomepa: "Helena Rocha",
+      dtentr: formatDateInput(addDays(referenceDate, 2)),
+      hrcad: "10:40",
+      dtret: formatDateInput(addDays(referenceDate, 5)),
+      hrret: "11:40",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "11",
+      nrrqu: "22102",
+      serier: "1",
+      nomepa: "Rafael Moreira",
+      dtentr: formatDateInput(addDays(referenceDate, 3)),
+      hrcad: "15:20",
+      dtret: formatDateInput(addDays(referenceDate, 5)),
+      hrret: "17:00",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 1,
+    },
+    {
+      cdfil: "11",
+      nrrqu: "22103",
+      serier: "1",
+      nomepa: "Marina Duarte",
+      dtentr: formatDateInput(addDays(referenceDate, 3)),
+      hrcad: "09:05",
+      dtret: formatDateInput(addDays(referenceDate, 5)),
+      hrret: "13:35",
+      cdfild: "14",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "12",
+      nrrqu: "22104",
+      serier: "2",
+      nomepa: "Carlos Henrique",
+      dtentr: formatDateInput(addDays(referenceDate, 4)),
+      hrcad: "11:55",
+      dtret: formatDateInput(addDays(referenceDate, 5)),
+      hrret: "15:25",
+      cdfild: "14",
+      cdetapa: "10",
+      cdopera: 1,
+    },
+    {
+      cdfil: "13",
+      nrrqu: "22105",
+      serier: "1",
+      nomepa: "Beatriz Nunes",
+      dtentr: formatDateInput(addDays(referenceDate, 4)),
+      hrcad: "08:00",
+      dtret: formatDateInput(addDays(referenceDate, 6)),
+      hrret: "10:10",
+      cdfild: "15",
+      cdetapa: "08",
+      cdopera: 1,
+    },
+    {
+      cdfil: "12",
+      nrrqu: "22106",
+      serier: "1",
+      nomepa: "Patricia Lima",
+      dtentr: formatDateInput(addDays(referenceDate, -3)),
+      hrcad: "07:40",
+      dtret: formatDateInput(addDays(referenceDate, -1)),
+      hrret: "08:55",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "7",
+      nrrqu: "22107",
+      serier: "1",
+      nomepa: "Diego Martins",
+      dtentr: formatDateInput(addDays(referenceDate, -2)),
+      hrcad: "09:15",
+      dtret: formatDateInput(addDays(referenceDate, 0)),
+      hrret: "14:05",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "8",
+      nrrqu: "22108",
+      serier: "1",
+      nomepa: "Fernanda Alves",
+      dtentr: formatDateInput(addDays(referenceDate, -1)),
+      hrcad: "10:50",
+      dtret: formatDateInput(addDays(referenceDate, 1)),
+      hrret: "15:45",
+      cdfild: "12",
+      cdetapa: "10",
+      cdopera: 1,
+    },
+    {
+      cdfil: "9",
+      nrrqu: "22109",
+      serier: "2",
+      nomepa: "Rogério Costa",
+      dtentr: formatDateInput(addDays(referenceDate, 0)),
+      hrcad: "12:30",
+      dtret: formatDateInput(addDays(referenceDate, 2)),
+      hrret: "16:20",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "10",
+      nrrqu: "22110",
+      serier: "1",
+      nomepa: "Larissa Gomes",
+      dtentr: formatDateInput(addDays(referenceDate, 0)),
+      hrcad: "13:05",
+      dtret: formatDateInput(addDays(referenceDate, 3)),
+      hrret: "18:10",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 1,
+    },
+    {
+      cdfil: "11",
+      nrrqu: "22111",
+      serier: "1",
+      nomepa: "Tiago Fernandes",
+      dtentr: formatDateInput(addDays(referenceDate, 1)),
+      hrcad: "14:25",
+      dtret: formatDateInput(addDays(referenceDate, 4)),
+      hrret: "19:30",
+      cdfild: "12",
+      cdetapa: "10",
+      cdopera: 1,
+    },
+    {
+      cdfil: "12",
+      nrrqu: "22112",
+      serier: "2",
+      nomepa: "Camila Rocha",
+      dtentr: formatDateInput(addDays(referenceDate, 1)),
+      hrcad: "15:40",
+      dtret: formatDateInput(addDays(referenceDate, 4)),
+      hrret: "20:05",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "13",
+      nrrqu: "22113",
+      serier: "1",
+      nomepa: "Gustavo Ribeiro",
+      dtentr: formatDateInput(addDays(referenceDate, 2)),
+      hrcad: "16:15",
+      dtret: formatDateInput(addDays(referenceDate, 5)),
+      hrret: "21:15",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 1,
+    },
+    {
+      cdfil: "12",
+      nrrqu: "22114",
+      serier: "1",
+      nomepa: "Leticia Barros",
+      dtentr: formatDateInput(addDays(referenceDate, -1)),
+      hrcad: "07:20",
+      dtret: formatDateInput(addDays(referenceDate, 0)),
+      hrret: "12:05",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 2,
+    },
+    {
+      cdfil: "7",
+      nrrqu: "22115",
+      serier: "2",
+      nomepa: "Andre Luiz",
+      dtentr: formatDateInput(addDays(referenceDate, 0)),
+      hrcad: "11:35",
+      dtret: formatDateInput(addDays(referenceDate, 2)),
+      hrret: "14:55",
+      cdfild: "12",
+      cdetapa: "08",
+      cdopera: 1,
+    },
   ];
-
-  return rows.map(
-    ([
-      cdfil,
-      nrrqu,
-      serier,
-      nomepa,
-      dtentrOffset,
-      hrcad,
-      dtretOffset,
-      hrret,
-      cdfild,
-      cdetapa,
-      cdopera,
-      atrasada = 0,
-    ]) => ({
-      cdfil,
-      nrrqu,
-      serier,
-      nomepa,
-      dtentr: formatDateInput(addDays(referenceDate, dtentrOffset)),
-      hrcad,
-      dtret: formatDateInput(addDays(referenceDate, dtretOffset)),
-      hrret,
-      cdfild,
-      cdetapa,
-      cdopera,
-      atrasada,
-      prazo_atraso_horas: DEFAULT_DELAY_HOURS,
-      data_limite_atraso: formatDateInput(addDays(referenceDate, dtretOffset + 1)),
-    }),
-  );
 }
 
 export function formatDateInput(date) {
@@ -203,10 +465,8 @@ function normalizeErpRow(row) {
   const cdfild = normalizeCode(getField(row, "cdfild"));
   const cdetapa = normalizeStep(getField(row, "cdetapa"));
   const cdopera = normalizeOperation(getField(row, "cdopera"));
-  const isLate = normalizeBoolean(getField(row, "atrasada"));
   const statusMeta = STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`];
-  const effectiveStatusMeta =
-    isLate && statusMeta?.status !== "recebido" ? STATUS_BY_STEP_OPERATION["00:0"] : statusMeta;
+  const effectiveStatusMeta = statusMeta;
   const request = `${cdfil}-${nrrqu}-${serier}`;
 
   return {
@@ -224,9 +484,6 @@ function normalizeErpRow(row) {
     cdfild,
     cdetapa,
     cdopera,
-    atrasada: isLate,
-    prazoAtrasoHoras: normalizeDelayHours(getField(row, "prazo_atraso_horas")),
-    dataLimiteAtraso: normalizeDateTime(getField(row, "data_limite_atraso")),
     stepLabel: `${cdetapa} - ${STEP_LABELS[cdetapa] ?? "Etapa"}`,
     operationLabel: `${cdopera} - ${OPERATION_LABELS[cdopera] ?? "Operacao"}`,
     origin: `Filial origem ${cdfil}`,
@@ -320,22 +577,6 @@ function normalizeTime(value) {
   }
 
   return text;
-}
-
-function normalizeDateTime(value) {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  return normalizeCode(value);
-}
-
-function normalizeBoolean(value) {
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  return ["1", "true", "t", "yes", "sim"].includes(normalizeCode(value).toLowerCase());
 }
 
 function toFirebirdDateLiteral(value) {

@@ -1,7 +1,5 @@
 import FirebirdModule from "node-firebird";
 import { addDays, buildRecebimentoErpQuery } from "../src/erpRecebimento.js";
-import { getDelaySetting } from "./configuracao.js";
-import { DEFAULT_DELAY_HOURS, normalizeDelayHours } from "../src/delaySettings.js";
 
 const Firebird = FirebirdModule.default || FirebirdModule;
 
@@ -36,8 +34,7 @@ export default async function handler(request, response) {
   const cdfilds = parseCdfilds(url.searchParams.get("cdfild") || url.searchParams.get("branches"));
   const startDate = url.searchParams.get("start") || formatDateInTimeZone(addDays(new Date(), ERP_WINDOW.startOffsetDays));
   const endDate = url.searchParams.get("end") || formatDateInTimeZone(addDays(new Date(), ERP_WINDOW.endOffsetDays));
-  const delayHours = await resolveDelayHours(url.searchParams.get("delayHours"));
-  const query = buildRecebimentoErpQuery(cdfilds, { startDate, endDate, delayHours });
+  const query = buildRecebimentoErpQuery(cdfilds, { startDate, endDate });
 
   try {
     const rows = await queryFirebird(query);
@@ -48,7 +45,6 @@ export default async function handler(request, response) {
         cdfilds,
         startDate,
         endDate,
-        delayHours,
         count: rows.length,
         query,
         source: "firebird",
@@ -64,20 +60,6 @@ export default async function handler(request, response) {
         database: FIREBIRD_OPTIONS.database,
       },
     });
-  }
-}
-
-async function resolveDelayHours(queryValue) {
-  if (queryValue) {
-    return normalizeDelayHours(queryValue);
-  }
-
-  try {
-    const setting = await getDelaySetting();
-
-    return normalizeDelayHours(setting?.prazoAtrasoHoras);
-  } catch {
-    return DEFAULT_DELAY_HOURS;
   }
 }
 

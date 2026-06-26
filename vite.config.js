@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 
 const apiRoutes = {
-  "/api/configuracao": () => import("./api/configuracao.js"),
   "/api/recebimento": () => import("./api/recebimento.js"),
 };
 
