@@ -31,6 +31,34 @@ WHERE 1=1
     AND v.tpformafarma <> 6
 `.trim();
 
+export const ATRASADOS_ERP_QUERY = `
+SELECT
+    v.cdfil,
+    v.nrrqu,
+    v.serier,
+    v.nomepa,
+    v.dtentr,
+    v.hrcad,
+    v.dtret,
+    EXTRACT(HOUR FROM v.hrret) hrret,
+    v.cdfild
+FROM
+    fc12100 v
+WHERE 1=1
+    AND v.dtret >= {startDate}
+    AND v.dtret < {endDate}
+    AND v.cdfild IN ({branchList})
+    AND v.tpformafarma <> 6
+    AND NOT EXISTS (
+        SELECT 1
+        FROM fc12500 prd
+        WHERE 1=1
+            AND prd.nrrqu = v.nrrqu
+            AND prd.cdfil = v.cdfil
+            AND prd.cdetapa = '08'
+    )
+`.trim();
+
 export function buildRecebimentoErpQuery(
   cdfilds = [DEFAULT_CDFILD],
   { startDate, endDate } = {},
@@ -44,6 +72,23 @@ export function buildRecebimentoErpQuery(
   const rangeEnd = endDate ? toFirebirdDateLiteral(endDate) : "current_date + 5";
 
   return RECEBIMENTO_ERP_QUERY.replace("{startDate}", rangeStart)
+    .replace("{endDate}", rangeEnd)
+    .replace("{branchList}", branchList || DEFAULT_CDFILD);
+}
+
+export function buildAtrasadosErpQuery(
+  cdfilds = [DEFAULT_CDFILD],
+  { startDate, endDate } = {},
+) {
+  const branchList = cdfilds
+    .map((cdfild) => Number.parseInt(cdfild, 10))
+    .filter((cdfild) => Number.isFinite(cdfild))
+    .join(", ");
+
+  const rangeStart = startDate ? toFirebirdDateLiteral(startDate) : "current_date - 1";
+  const rangeEnd = endDate ? toFirebirdDateLiteral(endDate) : "current_date + 6";
+
+  return ATRASADOS_ERP_QUERY.replace("{startDate}", rangeStart)
     .replace("{endDate}", rangeEnd)
     .replace("{branchList}", branchList || DEFAULT_CDFILD);
 }
@@ -89,6 +134,10 @@ export function normalizeErpRows(rows) {
     .filter((row) => row.status !== "ignorado");
 
   return getCurrentRowsByRequest(normalizedRows);
+}
+
+export function normalizeLateErpRows(rows) {
+  return rows.map((row) => normalizeLateErpRow(row));
 }
 
 export function getDestinationBranches(rows) {
@@ -490,6 +539,42 @@ function normalizeErpRow(row) {
   };
 }
 
+function normalizeLateErpRow(row) {
+  const cdfil = normalizeCode(getField(row, "cdfil"));
+  const nrrqu = normalizeCode(getField(row, "nrrqu"));
+  const serier = normalizeCode(getField(row, "serier"));
+  const nomepa = normalizeCode(getField(row, "nomepa"));
+  const cdfild = normalizeCode(getField(row, "cdfild"));
+  const request = `${cdfil}-${nrrqu}-${serier}`;
+  const markedHour = normalizeMarkedHour(getField(row, "hrret"));
+  const deadlineHour = markedHour == null ? null : Math.max(markedHour - 2, 0);
+
+  return {
+    id: request,
+    request,
+    title: nomepa || `Requisicao ${request}`,
+    cdfil,
+    nrrqu,
+    serier,
+    nomepa,
+    dtentr: normalizeDate(getField(row, "dtentr")),
+    hrcad: normalizeTime(getField(row, "hrcad")),
+    dtret: normalizeDate(getField(row, "dtret")),
+    hrret: markedHour == null ? normalizeTime(getField(row, "hrret")) : `${String(markedHour).padStart(2, "0")}:00`,
+    cdfild,
+    cdetapa: "08",
+    cdopera: "0",
+    markedHour,
+    deadlineHour,
+    stepLabel: "08 - Logistica",
+    operationLabel: "Sem PCP de saida",
+    origin: `Filial origem ${cdfil}`,
+    destination: `Filial destino ${cdfild}`,
+    status: "pendentes",
+    statusLabel: "Atrasado",
+  };
+}
+
 function getCurrentRowsByRequest(rows) {
   const rowsByRequest = new Map();
 
@@ -574,6 +659,17 @@ function normalizeTime(value) {
   }
 
   return text;
+}
+
+function normalizeMarkedHour(value) {
+  if (value instanceof Date) {
+    return value.getHours();
+  }
+
+  const text = normalizeCode(value);
+  const hour = Number.parseInt(text.split(":")[0], 10);
+
+  return Number.isFinite(hour) ? hour : null;
 }
 
 function toFirebirdDateLiteral(value) {

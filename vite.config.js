@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 
 const apiRoutes = {
+  "/api/atrasados": () => import("./api/atrasados.js"),
   "/api/recebimento": () => import("./api/recebimento.js"),
 };
 

@@ -6,6 +6,7 @@ import {
   createMockErpRows,
   formatDateInput,
   normalizeErpRows,
+  normalizeLateErpRows,
 } from "./erpRecebimento.js";
 
 const app = document.querySelector("#app");
@@ -391,6 +392,7 @@ const expandedLateColumns = {
 };
 
 let formulas = [];
+let lateFormulas = [];
 let isLoading = false;
 let dataStatusTimer = null;
 let routeTransitionTimer = null;
@@ -581,7 +583,9 @@ async function loadRealData() {
   setDataStatus("loading", "Sincronizando...");
 
   if (import.meta.env.DEV) {
-    formulas = normalizeErpRows(createMockErpRows(today));
+    const mockRows = createMockErpRows(today);
+    formulas = normalizeErpRows(mockRows);
+    lateFormulas = normalizeLateErpRows(mockRows);
     isLoading = false;
     setDataStatus("fallback", "Ambiente local usando dados simulados para visualização.", {
       autoHide: true,
@@ -595,32 +599,50 @@ async function loadRealData() {
   const endDate = endDateInput.value || isoToday;
 
   try {
-    const response = await fetch(
-      `/api/recebimento?cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}`,
-      {
+    const queryString = `cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}`;
+    const [recebimentoResponse, atrasadosResponse] = await Promise.all([
+      fetch(`/api/recebimento?${queryString}`, {
         headers: {
           Accept: "application/json",
         },
-      },
-    );
+      }),
+      fetch(`/api/atrasados?${queryString}`, {
+        headers: {
+          Accept: "application/json",
+        },
+      }),
+    ]);
 
-    if (!response.ok) {
-      throw new Error(`Falha ao consultar API: ${response.status}`);
+    if (!recebimentoResponse.ok) {
+      throw new Error(`Falha ao consultar API de recebimento: ${recebimentoResponse.status}`);
     }
 
-    const payload = await response.json();
+    if (!atrasadosResponse.ok) {
+      throw new Error(`Falha ao consultar API de atrasados: ${atrasadosResponse.status}`);
+    }
 
-    if (!payload || !Array.isArray(payload.rows)) {
+    const [recebimentoPayload, atrasadosPayload] = await Promise.all([
+      recebimentoResponse.json(),
+      atrasadosResponse.json(),
+    ]);
+
+    if (!recebimentoPayload || !Array.isArray(recebimentoPayload.rows)) {
       throw new Error("Resposta inválida da API de recebimento");
     }
 
-    formulas = normalizeErpRows(payload.rows);
+    if (!atrasadosPayload || !Array.isArray(atrasadosPayload.rows)) {
+      throw new Error("Resposta inválida da API de atrasados");
+    }
+
+    formulas = normalizeErpRows(recebimentoPayload.rows);
+    lateFormulas = normalizeLateErpRows(atrasadosPayload.rows);
     setDataStatus("ready", "Sincronizado", { autoHide: true });
   } catch (error) {
     formulas = [];
+    lateFormulas = [];
     setDataStatus(
       "error",
-      "Falha ao carregar dados reais do banco. Verifique as variáveis de ambiente e a rota /api/recebimento.",
+      "Falha ao carregar dados reais do banco. Verifique as variáveis de ambiente e as rotas de API.",
     );
   }
 
@@ -690,10 +712,10 @@ function renderEmptyState(column, status) {
 function render() {
   syncStageOptions();
   const filteredFormulas = getFilteredFormulas();
-  const lateFormulas = getLateFormulas(filteredFormulas);
+  const filteredLateFormulas = getFilteredLateFormulas();
 
   renderStandardDashboard(filteredFormulas);
-  renderLateDashboard(lateFormulas);
+  renderLateDashboard(filteredLateFormulas);
   syncViewVisibility();
 }
 
@@ -738,8 +760,7 @@ function renderStandardDashboard(filteredFormulas) {
 }
 
 function renderLateDashboard(lateFormulas) {
-  const displayLateFormulas = lateFormulas.filter((formula) => getLateBucket(formula) !== "19:00");
-  const grouped = displayLateFormulas.reduce(
+  const grouped = lateFormulas.reduce(
     (acc, formula) => {
       const bucket = getLateBucket(formula);
 
@@ -756,10 +777,7 @@ function renderLateDashboard(lateFormulas) {
   });
 
   Object.entries(lateColumns).forEach(([bucket, column]) => {
-    const formulasByBucket =
-      bucket === "19:00"
-        ? []
-        : displayLateFormulas.filter((formula) => getLateBucket(formula) === bucket);
+    const formulasByBucket = lateFormulas.filter((formula) => getLateBucket(formula) === bucket);
     const visibleFormulas = expandedLateColumns[bucket]
       ? formulasByBucket
       : formulasByBucket.slice(0, collapsedLimit);
@@ -782,7 +800,7 @@ function renderLateDashboard(lateFormulas) {
     updateColumnFooter(`late-${bucket}`, formulasByBucket.length, expandedLateColumns);
   });
 
-  lateTotalCount.textContent = formatNumber(displayLateFormulas.length);
+  lateTotalCount.textContent = formatNumber(lateFormulas.length);
 }
 
 function renderLateEmptyState(column, bucket) {
@@ -817,23 +835,50 @@ function getFilteredFormulas() {
   });
 }
 
-function getLateFormulas(filteredFormulas = getFilteredFormulas()) {
-  return filteredFormulas.filter((formula) => formula.status !== "recebido");
+function getFilteredLateFormulas() {
+  const requestQuery = normalizeSearch(requestSearch.value);
+
+  return lateFormulas
+    .filter((formula) => isLateByMarkedTime(formula))
+    .filter((formula) => requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery));
 }
 
 function getLateBucket(formula) {
-  const sourceTime = formula.hrret || formula.hrcad || "";
-  const hour = Number.parseInt(String(sourceTime).slice(0, 2), 10);
+  const hour = Number.isFinite(formula.deadlineHour)
+    ? formula.deadlineHour
+    : Number.parseInt(String(formula.hrret || formula.hrcad || "").slice(0, 2), 10) - 2;
 
   if (!Number.isFinite(hour)) {
     return "19:00";
   }
 
-  if (hour < 13) return "12:00";
-  if (hour < 17) return "16:00";
-  if (hour < 19) return "18:00";
+  if (hour <= 12) return "12:00";
+  if (hour <= 16) return "16:00";
+  if (hour <= 18) return "18:00";
 
   return "19:00";
+}
+
+function isLateByMarkedTime(formula) {
+  const withdrawalDate = String(formula.dtret || "").slice(0, 10);
+
+  if (!withdrawalDate) {
+    return true;
+  }
+
+  if (withdrawalDate < isoToday) {
+    return true;
+  }
+
+  if (withdrawalDate > isoToday) {
+    return false;
+  }
+
+  const deadlineHour = Number.isFinite(formula.deadlineHour)
+    ? formula.deadlineHour
+    : Number.parseInt(String(formula.hrret || "").slice(0, 2), 10) - 2;
+
+  return Number.isFinite(deadlineHour) ? new Date().getHours() >= deadlineHour : true;
 }
 
 function getRenderStatus(formula) {
@@ -1052,7 +1097,7 @@ document.querySelectorAll(".column-footer").forEach((button) => {
 
 
 exportButton.addEventListener("click", () => {
-  const rows = isLateRoute() ? getLateFormulas() : getVisibleFormulas();
+  const rows = isLateRoute() ? getFilteredLateFormulas() : getVisibleFormulas();
 
   if (rows.length === 0) {
     setDataStatus("fallback", "Não há registros no recorte atual para exportar.", {
