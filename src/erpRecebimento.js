@@ -28,7 +28,7 @@ LEFT JOIN
 WHERE 1=1
     AND v.dtret BETWEEN {startDate} AND {endDate}
     AND v.cdfild IN ({branchList})
-    AND v.tpformafarma <> 6
+    AND v.tpformafarma NOT IN (6,7,8)
 `.trim();
 
 export const ATRASADOS_ERP_QUERY = `
@@ -48,7 +48,7 @@ WHERE 1=1
     AND v.dtret >= {startDate}
     AND v.dtret < {endDate}
     AND v.cdfild IN ({branchList})
-    AND v.tpformafarma <> 6
+    AND v.tpformafarma NOT IN (6,7,8)
     AND NOT EXISTS (
         SELECT 1
         FROM fc12500 prd
