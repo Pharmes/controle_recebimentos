@@ -504,6 +504,22 @@ export function addDays(date, days) {
   return nextDate;
 }
 
+function addDaysString(dateText, days) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
+    return "";
+  }
+
+  const [year, month, day] = dateText.split("-").map((part) => Number.parseInt(part, 10));
+  const baseDate = new Date(Date.UTC(year, month - 1, day));
+  baseDate.setUTCDate(baseDate.getUTCDate() + days);
+
+  return [
+    baseDate.getUTCFullYear(),
+    String(baseDate.getUTCMonth() + 1).padStart(2, "0"),
+    String(baseDate.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
 function normalizeErpRow(row) {
   const cdfil = normalizeCode(getField(row, "cdfil"));
   const nrrqu = normalizeCode(getField(row, "nrrqu"));
@@ -547,8 +563,7 @@ function normalizeLateErpRow(row) {
   const nomepa = normalizeCode(getField(row, "nomepa"));
   const cdfild = normalizeCode(getField(row, "cdfild"));
   const request = `${cdfil}-${nrrqu}-${serier}`;
-  const markedHour = normalizeMarkedHour(getField(row, "hrret"));
-  const deadlineHour = markedHour == null ? null : Math.max(markedHour - 2, 0);
+  const dtret = normalizeDate(getField(row, "dtret"));
 
   return {
     id: request,
@@ -560,13 +575,12 @@ function normalizeLateErpRow(row) {
     nomepa,
     dtentr: normalizeDate(getField(row, "dtentr")),
     hrcad: normalizeTime(getField(row, "hrcad")),
-    dtret: normalizeDate(getField(row, "dtret")),
-    hrret: markedHour == null ? normalizeTime(getField(row, "hrret")) : `${String(markedHour).padStart(2, "0")}:00`,
+    dtret,
+    hrret: normalizeTime(getField(row, "hrret")),
     cdfild,
     cdetapa: "08",
     cdopera: "0",
-    markedHour,
-    deadlineHour,
+    lateAfterDate: addDaysString(dtret, 1),
     stepLabel: "08 - Logistica",
     operationLabel: "Sem PCP de saida",
     origin: `Filial origem ${cdfil}`,
@@ -660,17 +674,6 @@ function normalizeTime(value) {
   }
 
   return text;
-}
-
-function normalizeMarkedHour(value) {
-  if (value instanceof Date) {
-    return value.getHours();
-  }
-
-  const text = normalizeCode(value);
-  const hour = Number.parseInt(text.split(":")[0], 10);
-
-  return Number.isFinite(hour) ? hour : null;
 }
 
 function toFirebirdDateLiteral(value) {

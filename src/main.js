@@ -844,9 +844,7 @@ function getFilteredLateFormulas() {
 }
 
 function getLateBucket(formula) {
-  const hour = Number.isFinite(formula.deadlineHour)
-    ? formula.deadlineHour
-    : Number.parseInt(String(formula.hrret || formula.hrcad || "").slice(0, 2), 10) - 2;
+  const hour = Number.parseInt(String(formula.hrret || formula.hrcad || "").slice(0, 2), 10);
 
   if (!Number.isFinite(hour)) {
     return "19:00";
@@ -860,25 +858,13 @@ function getLateBucket(formula) {
 }
 
 function isLateByMarkedTime(formula) {
-  const withdrawalDate = String(formula.dtret || "").slice(0, 10);
+  const lateAfterDate = String(formula.lateAfterDate || "").slice(0, 10);
 
-  if (!withdrawalDate) {
+  if (!lateAfterDate) {
     return true;
   }
 
-  if (withdrawalDate < isoToday) {
-    return true;
-  }
-
-  if (withdrawalDate > isoToday) {
-    return false;
-  }
-
-  const deadlineHour = Number.isFinite(formula.deadlineHour)
-    ? formula.deadlineHour
-    : Number.parseInt(String(formula.hrret || "").slice(0, 2), 10) - 2;
-
-  return Number.isFinite(deadlineHour) ? new Date().getHours() >= deadlineHour : true;
+  return isoToday >= lateAfterDate;
 }
 
 function getRenderStatus(formula) {
