@@ -861,7 +861,7 @@ function isLateByMarkedTime(formula) {
   const lateAfterDate = String(formula.lateAfterDate || "").slice(0, 10);
 
   if (!lateAfterDate) {
-    return true;
+    return false;
   }
 
   return isoToday >= lateAfterDate;
