@@ -843,9 +843,9 @@ function getFilteredFormulas() {
 function getFilteredLateFormulas() {
   const requestQuery = normalizeSearch(requestSearch.value);
 
-  return lateFormulas.filter(
-    (formula) => requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery),
-  );
+  return lateFormulas
+    .filter((formula) => isLateByMarkedTime(formula))
+    .filter((formula) => requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery));
 }
 
 function getLateBucket(formula) {
@@ -877,6 +877,16 @@ function getLateDateRange() {
     startDate: startDate && startDate !== STANDARD_START_DATE ? startDate : LATE_START_DATE,
     endDate: endDate && endDate !== STANDARD_END_DATE ? endDate : LATE_END_DATE,
   };
+}
+
+function isLateByMarkedTime(formula) {
+  const lateAfterDate = String(formula.lateAfterDate || "").slice(0, 10);
+
+  if (!lateAfterDate) {
+    return false;
+  }
+
+  return isoToday >= lateAfterDate;
 }
 
 function getRenderStatus(formula) {
