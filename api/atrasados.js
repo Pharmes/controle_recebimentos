@@ -4,8 +4,8 @@ import { addDays, buildAtrasadosErpQuery } from "../src/erpRecebimento.js";
 const Firebird = FirebirdModule.default || FirebirdModule;
 
 const ERP_WINDOW = {
-  startOffsetDays: -1,
-  endOffsetDays: 5,
+  startOffsetDays: -30,
+  endOffsetDays: 0,
 };
 
 const FILIAL_DESTINO_IDS = ["1", "2", "7", "8", "9", "12", "13", "20"];

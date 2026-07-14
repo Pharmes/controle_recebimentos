@@ -12,6 +12,10 @@ import {
 const app = document.querySelector("#app");
 const today = new Date();
 const isoToday = formatDateInput(today);
+const STANDARD_START_DATE = formatDateInput(addDays(today, ERP_WINDOW.startOffsetDays));
+const STANDARD_END_DATE = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
+const LATE_START_DATE = formatDateInput(addDays(today, -30));
+const LATE_END_DATE = isoToday;
 const FILIAL_LABELS = {
   1: "Constança Valadares",
   2: "Santa Rita",
@@ -481,8 +485,8 @@ systemIcon.addEventListener("error", () => {
 });
 
 populateBranchFilter();
-startDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.startOffsetDays));
-endDateInput.value = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
+startDateInput.value = STANDARD_START_DATE;
+endDateInput.value = STANDARD_END_DATE;
 
 function populateBranchFilter() {
   branchSelect.innerHTML = [
@@ -595,18 +599,19 @@ async function loadRealData() {
   }
 
   const cdfild = branchSelect.value;
-  const startDate = startDateInput.value || isoToday;
-  const endDate = endDateInput.value || isoToday;
+  const standardRange = getStandardDateRange();
+  const lateRange = getLateDateRange();
 
   try {
-    const queryString = `cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(startDate)}&end=${encodeURIComponent(endDate)}`;
+    const standardQueryString = `cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(standardRange.startDate)}&end=${encodeURIComponent(standardRange.endDate)}`;
+    const lateQueryString = `cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(lateRange.startDate)}&end=${encodeURIComponent(lateRange.endDate)}`;
     const [recebimentoResponse, atrasadosResponse] = await Promise.all([
-      fetch(`/api/recebimento?${queryString}`, {
+      fetch(`/api/recebimento?${standardQueryString}`, {
         headers: {
           Accept: "application/json",
         },
       }),
-      fetch(`/api/atrasados?${queryString}`, {
+      fetch(`/api/atrasados?${lateQueryString}`, {
         headers: {
           Accept: "application/json",
         },
@@ -838,9 +843,9 @@ function getFilteredFormulas() {
 function getFilteredLateFormulas() {
   const requestQuery = normalizeSearch(requestSearch.value);
 
-  return lateFormulas
-    .filter((formula) => isLateByMarkedTime(formula))
-    .filter((formula) => requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery));
+  return lateFormulas.filter(
+    (formula) => requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery),
+  );
 }
 
 function getLateBucket(formula) {
@@ -857,14 +862,21 @@ function getLateBucket(formula) {
   return "19:00";
 }
 
-function isLateByMarkedTime(formula) {
-  const lateAfterDate = String(formula.lateAfterDate || "").slice(0, 10);
+function getStandardDateRange() {
+  return {
+    startDate: startDateInput.value || STANDARD_START_DATE,
+    endDate: endDateInput.value || STANDARD_END_DATE,
+  };
+}
 
-  if (!lateAfterDate) {
-    return false;
-  }
+function getLateDateRange() {
+  const startDate = startDateInput.value;
+  const endDate = endDateInput.value;
 
-  return isoToday >= lateAfterDate;
+  return {
+    startDate: startDate && startDate !== STANDARD_START_DATE ? startDate : LATE_START_DATE,
+    endDate: endDate && endDate !== STANDARD_END_DATE ? endDate : LATE_END_DATE,
+  };
 }
 
 function getRenderStatus(formula) {

@@ -87,8 +87,8 @@ export function buildAtrasadosErpQuery(
     .filter((cdfild) => Number.isFinite(cdfild))
     .join(", ");
 
-  const rangeStart = startDate ? toFirebirdDateLiteral(startDate) : "current_date - 1";
-  const rangeEnd = endDate ? toFirebirdDateLiteral(endDate) : "current_date + 6";
+  const rangeStart = startDate ? toFirebirdDateLiteral(startDate) : "current_date - 30";
+  const rangeEnd = endDate ? toFirebirdDateLiteral(endDate) : "current_date";
 
   return ATRASADOS_ERP_QUERY.replace("{startDate}", rangeStart)
     .replace("{endDate}", rangeEnd)
