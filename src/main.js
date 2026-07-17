@@ -17,6 +17,7 @@ const STANDARD_END_DATE = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDay
 const LATE_START_DATE = formatDateInput(addDays(today, -30));
 const LATE_END_DATE = isoToday;
 const LATE_REFRESH_INTERVAL_MS = 60_000;
+const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const FILIAL_LABELS = {
   1: "Constança Valadares",
   2: "Santa Rita",
@@ -608,12 +609,12 @@ async function loadRealData() {
     const standardQueryString = `cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(standardRange.startDate)}&end=${encodeURIComponent(standardRange.endDate)}`;
     const lateQueryString = `cdfild=${encodeURIComponent(cdfild)}&start=${encodeURIComponent(lateRange.startDate)}&end=${encodeURIComponent(lateRange.endDate)}`;
     const [recebimentoResponse, atrasadosResponse] = await Promise.all([
-      fetch(`/api/recebimento?${standardQueryString}`, {
+      fetch(apiUrl("/api/recebimento", standardQueryString), {
         headers: {
           Accept: "application/json",
         },
       }),
-      fetch(`/api/atrasados?${lateQueryString}`, {
+      fetch(apiUrl("/api/atrasados", lateQueryString), {
         headers: {
           Accept: "application/json",
         },
@@ -647,9 +648,10 @@ async function loadRealData() {
   } catch (error) {
     formulas = [];
     lateFormulas = [];
+    const detail = error instanceof Error ? error.message : String(error);
     setDataStatus(
       "error",
-      "Falha ao carregar dados reais do banco. Verifique as variáveis de ambiente e as rotas de API.",
+      `Falha ao carregar dados reais do banco. ${detail}`,
     );
   }
 
@@ -1006,6 +1008,27 @@ function formatBranch(label, branch) {
   const branchName = FILIAL_LABELS[code];
 
   return branchName ? `${label} ${code} - ${branchName}` : `${label} ${code || "--"}`;
+}
+
+function normalizeApiBaseUrl(value) {
+  const base = String(value ?? "").trim();
+
+  if (!base) {
+    return "";
+  }
+
+  return base.replace(/\/+$/, "");
+}
+
+function apiUrl(pathname, search = "") {
+  const url = new URL(pathname, API_BASE_URL || window.location.origin);
+  const query = String(search ?? "").replace(/^\?+/, "");
+
+  if (query) {
+    url.search = query;
+  }
+
+  return url.toString();
 }
 
 function buildExportCsv(rows) {
