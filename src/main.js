@@ -16,6 +16,7 @@ const STANDARD_START_DATE = formatDateInput(addDays(today, ERP_WINDOW.startOffse
 const STANDARD_END_DATE = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
 const LATE_START_DATE = formatDateInput(addDays(today, -30));
 const LATE_END_DATE = isoToday;
+const LATE_REFRESH_INTERVAL_MS = 60_000;
 const FILIAL_LABELS = {
   1: "Constança Valadares",
   2: "Santa Rita",
@@ -400,6 +401,7 @@ let lateFormulas = [];
 let isLoading = false;
 let dataStatusTimer = null;
 let routeTransitionTimer = null;
+let lateRefreshTimer = null;
 const ROUTES = {
   standard: "/",
   late: "/atrasados",
@@ -880,13 +882,13 @@ function getLateDateRange() {
 }
 
 function isLateByMarkedTime(formula) {
-  const lateAfterDate = String(formula.lateAfterDate || "").slice(0, 10);
+  const lateAfterAt = String(formula.lateAfterAt || formula.lateAfterDate || "").slice(0, 19);
 
-  if (!lateAfterDate) {
+  if (!lateAfterAt) {
     return false;
   }
 
-  return isoToday >= lateAfterDate;
+  return getCurrentDateTimeStamp() >= lateAfterAt;
 }
 
 function getRenderStatus(formula) {
@@ -917,6 +919,24 @@ function normalizeDateRangeInputs() {
   if (start && end && start > end) {
     endDateInput.value = start;
   }
+}
+
+function getCurrentDateTimeStamp(timeZone = "America/Sao_Paulo") {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const lookup = Object.fromEntries(
+    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
+  );
+
+  return `${lookup.year}-${lookup.month}-${lookup.day}T${lookup.hour}:${lookup.minute}:${lookup.second}`;
 }
 
 function normalizeSearch(value) {
@@ -1138,3 +1158,9 @@ exportButton.addEventListener("click", () => {
 render();
 syncLateToggleUi();
 loadRealData();
+
+lateRefreshTimer = window.setInterval(() => {
+  if (!isLoading) {
+    render();
+  }
+}, LATE_REFRESH_INTERVAL_MS);

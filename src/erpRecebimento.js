@@ -46,7 +46,7 @@ FROM
     fc12100 v
 WHERE 1=1
     AND v.dtret >= {startDate}
-    AND v.dtret < {endDate}
+    AND v.dtret <= {endDate}
     AND v.dtret < current_date
     AND v.cdfild IN ({branchList})
     AND v.tpformafarma NOT IN (6,7,8)
@@ -582,6 +582,7 @@ function normalizeLateErpRow(row) {
     cdetapa: "08",
     cdopera: "0",
     lateAfterDate: addDaysString(dtret, 1),
+    lateAfterAt: buildLateAfterAt(dtret, getField(row, "hrret")),
     stepLabel: "08 - Logistica",
     operationLabel: "Sem PCP de saida",
     origin: `Filial origem ${cdfil}`,
@@ -639,6 +640,56 @@ function normalizeOperation(value) {
   const operation = Number.parseInt(normalizeCode(value), 10);
 
   return Number.isFinite(operation) ? String(operation) : normalizeCode(value);
+}
+
+function buildLateAfterAt(dateText, timeValue) {
+  const nextDate = addDaysString(dateText, 1);
+
+  if (!nextDate) {
+    return "";
+  }
+
+  const { hour, minute } = parseTimeParts(timeValue);
+  const triggerHour = getLateTriggerHour(hour);
+  const normalizedMinute = Number.isFinite(minute) ? minute : 0;
+
+  return `${nextDate}T${String(triggerHour).padStart(2, "0")}:${String(normalizedMinute).padStart(2, "0")}:00`;
+}
+
+function getLateTriggerHour(hour) {
+  if (!Number.isFinite(hour)) {
+    return 19;
+  }
+
+  if (hour >= 19) {
+    return 19;
+  }
+
+  return Math.max(hour - 2, 0);
+}
+
+function parseTimeParts(value) {
+  if (value instanceof Date) {
+    return {
+      hour: value.getHours(),
+      minute: value.getMinutes(),
+    };
+  }
+
+  const text = normalizeCode(value);
+  const match = text.match(/^(\d{1,2})(?::(\d{2}))?/);
+
+  if (!match) {
+    return {
+      hour: Number.NaN,
+      minute: 0,
+    };
+  }
+
+  return {
+    hour: Number.parseInt(match[1], 10),
+    minute: Number.parseInt(match[2] || "0", 10),
+  };
 }
 
 function normalizeDate(value) {
