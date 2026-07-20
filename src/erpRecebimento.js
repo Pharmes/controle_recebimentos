@@ -103,6 +103,10 @@ const STATUS_BY_STEP_OPERATION = {
     status: "pendentes",
     statusLabel: "Pendente",
   },
+  "08:4": {
+    status: "pendentes",
+    statusLabel: "Pendente",
+  },
   "08:2": {
     status: "a-receber",
     statusLabel: "A receber",
@@ -127,6 +131,7 @@ const STEP_LABELS = {
 const OPERATION_LABELS = {
   1: "Entrada",
   2: "Saida",
+  4: "Pendencia",
 };
 
 export function normalizeErpRows(rows) {
@@ -528,7 +533,14 @@ function normalizeErpRow(row) {
   const cdfild = normalizeCode(getField(row, "cdfild"));
   const cdetapa = normalizeStep(getField(row, "cdetapa"));
   const cdopera = normalizeOperation(getField(row, "cdopera"));
-  const statusMeta = STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`];
+  const statusMeta =
+    STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`] ??
+    (cdopera === "4"
+      ? {
+          status: "pendentes",
+          statusLabel: "Pendente",
+        }
+      : undefined);
   const effectiveStatusMeta = statusMeta;
   const request = `${cdfil}-${nrrqu}-${serier}`;
 
