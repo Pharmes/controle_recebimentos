@@ -17,7 +17,7 @@ SELECT
     v.hrret,
     v.cdfild,
     p.cdetapa,
-    o.cdoperada AS cdopera
+    p.cdopera
 FROM
     fc12100 v
 LEFT JOIN
@@ -25,8 +25,6 @@ LEFT JOIN
     AND p.cdfil = v.cdfil
     AND p.serier = v.serier
     AND p.cdetapa IN ('00', '08', '10')
-LEFT JOIN
-    fc12530 o ON o.cdetapa = p.cdetapa
 WHERE 1=1
     AND v.dtret BETWEEN {startDate} AND {endDate}
     AND v.cdfild IN ({branchList})
@@ -101,6 +99,10 @@ const STATUS_BY_STEP_OPERATION = {
     status: "pendentes",
     statusLabel: "Pendente",
   },
+  "08:4": {
+    status: "pendentes",
+    statusLabel: "Pendente",
+  },
   "08:1": {
     status: "pendentes",
     statusLabel: "Pendente",
@@ -129,6 +131,7 @@ const STEP_LABELS = {
 const OPERATION_LABELS = {
   1: "Entrada",
   2: "Saida",
+  4: "Pendencia",
 };
 
 export function normalizeErpRows(rows) {
@@ -530,7 +533,14 @@ function normalizeErpRow(row) {
   const cdfild = normalizeCode(getField(row, "cdfild"));
   const cdetapa = normalizeStep(getField(row, "cdetapa"));
   const cdopera = normalizeOperation(getField(row, "cdopera"));
-  const statusMeta = STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`];
+  const statusMeta =
+    STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`] ??
+    (cdopera === "4"
+      ? {
+          status: "pendentes",
+          statusLabel: "Pendente",
+        }
+      : undefined);
   const effectiveStatusMeta = statusMeta;
   const request = `${cdfil}-${nrrqu}-${serier}`;
 
