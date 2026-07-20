@@ -26,9 +26,7 @@ LEFT JOIN
     AND p.serier = v.serier
     AND p.cdetapa IN ('00', '08', '10')
 LEFT JOIN
-    fc12530 o ON o.cdfil = v.cdfil
-    AND o.serier = v.serier
-    AND o.cdetapa = p.cdetapa
+    fc12530 o ON o.cdetapa = p.cdetapa
 WHERE 1=1
     AND v.dtret BETWEEN {startDate} AND {endDate}
     AND v.cdfild IN ({branchList})
