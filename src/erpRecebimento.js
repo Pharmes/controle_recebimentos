@@ -17,7 +17,7 @@ SELECT
     v.hrret,
     v.cdfild,
     p.cdetapa,
-    p.cdopera
+    p.cdoperada AS cdopera
 FROM
     fc12100 v
 LEFT JOIN
