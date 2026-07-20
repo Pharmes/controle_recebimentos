@@ -17,14 +17,18 @@ SELECT
     v.hrret,
     v.cdfild,
     p.cdetapa,
-    p.cdoperada AS cdopera
+    o.cdoperada AS cdopera
 FROM
     fc12100 v
 LEFT JOIN
-    fc12530 p ON p.nrrqu = v.nrrqu
+    fc12500 p ON p.nrrqu = v.nrrqu
     AND p.cdfil = v.cdfil
     AND p.serier = v.serier
     AND p.cdetapa IN ('00', '08', '10')
+LEFT JOIN
+    fc12530 o ON o.nrrqu = v.nrrqu
+    AND o.cdfil = v.cdfil
+    AND o.serier = v.serier
 WHERE 1=1
     AND v.dtret BETWEEN {startDate} AND {endDate}
     AND v.cdfild IN ({branchList})
