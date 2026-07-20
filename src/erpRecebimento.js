@@ -48,7 +48,7 @@ WHERE 1=1
     AND v.dtret >= {startDate}
     AND v.dtret <= {endDate}
     AND v.cdfild IN ({branchList})
-    AND v.tpformafarma NOT IN (6,7,8)
+    AND v.tpformafarma NOT IN (6,7,8,13)
     AND EXTRACT(HOUR FROM v.hrret) NOT IN ('3')
     AND NOT EXISTS (
         SELECT 1
