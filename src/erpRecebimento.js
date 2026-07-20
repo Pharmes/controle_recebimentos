@@ -21,7 +21,7 @@ SELECT
 FROM
     fc12100 v
 LEFT JOIN
-    fc12500 p ON p.nrrqu = v.nrrqu
+    fc12530 p ON p.nrrqu = v.nrrqu
     AND p.cdfil = v.cdfil
     AND p.serier = v.serier
     AND p.cdetapa IN ('00', '08', '10')
@@ -103,10 +103,6 @@ const STATUS_BY_STEP_OPERATION = {
     status: "pendentes",
     statusLabel: "Pendente",
   },
-  "08:4": {
-    status: "pendentes",
-    statusLabel: "Pendente",
-  },
   "08:2": {
     status: "a-receber",
     statusLabel: "A receber",
@@ -131,7 +127,6 @@ const STEP_LABELS = {
 const OPERATION_LABELS = {
   1: "Entrada",
   2: "Saida",
-  4: "Pendencia",
 };
 
 export function normalizeErpRows(rows) {
@@ -533,14 +528,7 @@ function normalizeErpRow(row) {
   const cdfild = normalizeCode(getField(row, "cdfild"));
   const cdetapa = normalizeStep(getField(row, "cdetapa"));
   const cdopera = normalizeOperation(getField(row, "cdopera"));
-  const statusMeta =
-    STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`] ??
-    (cdopera === "4"
-      ? {
-          status: "pendentes",
-          statusLabel: "Pendente",
-        }
-      : undefined);
+  const statusMeta = STATUS_BY_STEP_OPERATION[`${cdetapa}:${cdopera}`];
   const effectiveStatusMeta = statusMeta;
   const request = `${cdfil}-${nrrqu}-${serier}`;
 
