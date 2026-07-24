@@ -40,7 +40,7 @@ SELECT
     v.dtentr,
     v.hrcad,
     v.dtret,
-    EXTRACT(HOUR FROM v.hrret) hrret,
+    v.hrret,
     v.cdfild
 FROM
     fc12100 v
@@ -682,15 +682,45 @@ function getLateTriggerHour(hour) {
 function parseTimeParts(value) {
   if (value instanceof Date) {
     return {
-      hour: value.getHours(),
-      minute: value.getMinutes(),
+      hour: value.getUTCHours(),
+      minute: value.getUTCMinutes(),
+    };
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return {
+      hour: value,
+      minute: 0,
     };
   }
 
   const text = normalizeCode(value);
-  const match = text.match(/^(\d{1,2})(?::(\d{2}))?/);
+  if (!text) {
+    return {
+      hour: Number.NaN,
+      minute: 0,
+    };
+  }
+
+  if (/^\d{1,2}$/.test(text)) {
+    return {
+      hour: Number.parseInt(text, 10),
+      minute: 0,
+    };
+  }
+
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
 
   if (!match) {
+    const asDate = new Date(text);
+
+    if (!Number.isNaN(asDate.getTime())) {
+      return {
+        hour: asDate.getUTCHours(),
+        minute: asDate.getUTCMinutes(),
+      };
+    }
+
     return {
       hour: Number.NaN,
       minute: 0,
@@ -728,19 +758,18 @@ export function normalizeDate(value) {
 
 function normalizeTime(value) {
   if (value instanceof Date) {
-    return [value.getHours(), value.getMinutes()]
+    return [value.getUTCHours(), value.getUTCMinutes()]
       .map((part) => String(part).padStart(2, "0"))
       .join(":");
   }
 
-  const text = normalizeCode(value);
-  const match = text.match(/^(\d{1,2}):(\d{2})/);
+  const { hour, minute } = parseTimeParts(value);
 
-  if (match) {
-    return `${match[1].padStart(2, "0")}:${match[2]}`;
+  if (Number.isFinite(hour)) {
+    return `${String(hour).padStart(2, "0")}:${String(Number.isFinite(minute) ? minute : 0).padStart(2, "0")}`;
   }
 
-  return text;
+  return normalizeCode(value);
 }
 
 function toFirebirdDateLiteral(value) {
