@@ -703,7 +703,7 @@ function parseTimeParts(value) {
   };
 }
 
-function normalizeDate(value) {
+export function normalizeDate(value) {
   if (value instanceof Date) {
     return formatDateInTimeZone(value);
   }

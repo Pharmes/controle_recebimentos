@@ -1,5 +1,5 @@
 import FirebirdModule from "node-firebird";
-import { addDays, buildAtrasadosErpQuery } from "../src/erpRecebimento.js";
+import { addDays, buildAtrasadosErpQuery, normalizeDate } from "../src/erpRecebimento.js";
 
 const Firebird = FirebirdModule.default || FirebirdModule;
 
@@ -40,14 +40,22 @@ export default async function handler(request, response) {
 
   try {
     const rows = await queryFirebird(query);
+    const filteredRows = rows.filter((row) => {
+      const dtret = normalizeDate(row.dtret);
+
+      return dtret >= startDate && dtret <= endDate;
+    });
+
+    response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    response.setHeader("Pragma", "no-cache");
 
     response.status(200).json({
-      rows,
+      rows: filteredRows,
       meta: {
         cdfilds,
         startDate,
         endDate,
-        count: rows.length,
+        count: filteredRows.length,
         query,
         source: "firebird",
       },

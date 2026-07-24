@@ -625,12 +625,14 @@ async function loadRealData() {
         headers: {
           Accept: "application/json",
         },
+        cache: "no-store",
         signal: controller.signal,
       }),
       fetch(apiUrl("/api/atrasados", lateQueryString), {
         headers: {
           Accept: "application/json",
         },
+        cache: "no-store",
         signal: controller.signal,
       }),
     ]);
