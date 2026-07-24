@@ -871,9 +871,11 @@ function getFilteredFormulas() {
 
 function getFilteredLateFormulas() {
   const requestQuery = normalizeSearch(requestSearch.value);
+  const { startDate, endDate } = getLateDateRange();
 
   return lateFormulas
     .filter((formula) => isLateByMarkedTime(formula))
+    .filter((formula) => isWithinDateRange(formula.dtret, startDate, endDate))
     .filter((formula) => requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery));
 }
 
@@ -972,6 +974,14 @@ function normalizeSearch(value) {
     .toLocaleLowerCase("pt-BR")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isWithinDateRange(dateValue, startDate, endDate) {
+  if (!dateValue || !startDate || !endDate) {
+    return false;
+  }
+
+  return dateValue >= startDate && dateValue <= endDate;
 }
 
 function syncStageOptions() {
