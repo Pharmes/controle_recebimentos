@@ -400,6 +400,8 @@ const expandedLateColumns = {
 let formulas = [];
 let lateFormulas = [];
 let isLoading = false;
+let loadRequestId = 0;
+let loadRequestController = null;
 let dataStatusTimer = null;
 let routeTransitionTimer = null;
 let lateRefreshTimer = null;
@@ -582,18 +584,28 @@ function navigateToRoute(nextRoute, { replace = false } = {}) {
 }
 
 async function loadRealData() {
-  if (isLoading) {
-    return;
+  if (loadRequestController) {
+    loadRequestController.abort();
   }
 
+  const requestId = ++loadRequestId;
+  const controller = new AbortController();
+  loadRequestController = controller;
   isLoading = true;
+  formulas = [];
+  lateFormulas = [];
+  render();
   setDataStatus("loading", "Sincronizando...");
 
   if (import.meta.env.DEV) {
     const mockRows = createMockErpRows(today);
     formulas = normalizeErpRows(mockRows);
     lateFormulas = normalizeLateErpRows(mockRows);
+    if (requestId !== loadRequestId) {
+      return;
+    }
     isLoading = false;
+    loadRequestController = null;
     setDataStatus("fallback", "Ambiente local usando dados simulados para visualização.", {
       autoHide: true,
     });
@@ -613,11 +625,13 @@ async function loadRealData() {
         headers: {
           Accept: "application/json",
         },
+        signal: controller.signal,
       }),
       fetch(apiUrl("/api/atrasados", lateQueryString), {
         headers: {
           Accept: "application/json",
         },
+        signal: controller.signal,
       }),
     ]);
 
@@ -644,8 +658,14 @@ async function loadRealData() {
 
     formulas = normalizeErpRows(recebimentoPayload.rows);
     lateFormulas = normalizeLateErpRows(atrasadosPayload.rows);
+    if (requestId !== loadRequestId) {
+      return;
+    }
     setDataStatus("ready", "Sincronizado", { autoHide: true });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return;
+    }
     formulas = [];
     lateFormulas = [];
     const detail = error instanceof Error ? error.message : String(error);
@@ -655,7 +675,12 @@ async function loadRealData() {
     );
   }
 
+  if (requestId !== loadRequestId) {
+    return;
+  }
+
   isLoading = false;
+  loadRequestController = null;
   render();
 }
 
