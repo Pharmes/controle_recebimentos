@@ -56,7 +56,7 @@ WHERE 1=1
         WHERE 1=1
             AND prd.nrrqu = v.nrrqu
             AND prd.cdfil = v.cdfil
-            AND prd.cdetapa = '08'
+            AND prd.cdetapa IN ('08','10')
     )
 `.trim();
 
