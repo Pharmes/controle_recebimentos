@@ -705,7 +705,7 @@ function parseTimeParts(value) {
 
 function normalizeDate(value) {
   if (value instanceof Date) {
-    return formatDateInput(value);
+    return formatDateInTimeZone(value);
   }
 
   const text = normalizeCode(value);
@@ -745,4 +745,18 @@ function normalizeTime(value) {
 
 function toFirebirdDateLiteral(value) {
   return `CAST('${normalizeDate(value)}' AS DATE)`;
+}
+
+function formatDateInTimeZone(date, timeZone = "America/Sao_Paulo") {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const lookup = Object.fromEntries(
+    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
+  );
+
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
 }
