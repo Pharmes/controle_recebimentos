@@ -16,6 +16,16 @@ const STANDARD_START_DATE = formatDateInput(addDays(today, ERP_WINDOW.startOffse
 const STANDARD_END_DATE = formatDateInput(addDays(today, ERP_WINDOW.endOffsetDays));
 const LATE_START_DATE = formatDateInput(addDays(today, -30));
 const LATE_END_DATE = isoToday;
+const dateRangesByRoute = {
+  standard: {
+    startDate: STANDARD_START_DATE,
+    endDate: STANDARD_END_DATE,
+  },
+  late: {
+    startDate: LATE_START_DATE,
+    endDate: LATE_END_DATE,
+  },
+};
 const LATE_REFRESH_INTERVAL_MS = 60_000;
 const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const FILIAL_LABELS = {
@@ -490,8 +500,7 @@ systemIcon.addEventListener("error", () => {
 });
 
 populateBranchFilter();
-startDateInput.value = STANDARD_START_DATE;
-endDateInput.value = STANDARD_END_DATE;
+syncDateInputsToRoute();
 
 function populateBranchFilter() {
   branchSelect.innerHTML = [
@@ -502,6 +511,22 @@ function populateBranchFilter() {
   ].join("");
 
   branchSelect.value = "all";
+}
+
+function getDateRangeState(route = currentRoute) {
+  return route === ROUTES.late ? dateRangesByRoute.late : dateRangesByRoute.standard;
+}
+
+function syncDateInputsToRoute(route = currentRoute) {
+  const { startDate, endDate } = getDateRangeState(route);
+  startDateInput.value = startDate;
+  endDateInput.value = endDate;
+}
+
+function persistDateInputsToRoute(route = currentRoute) {
+  const targetRange = getDateRangeState(route);
+  targetRange.startDate = startDateInput.value || targetRange.startDate;
+  targetRange.endDate = endDateInput.value || targetRange.endDate;
 }
 
 function setDataStatus(state, message, { autoHide = false } = {}) {
@@ -527,6 +552,7 @@ function isLateRoute(route = currentRoute) {
 
 function syncRouteUi() {
   const lateView = isLateRoute();
+  syncDateInputsToRoute();
   workspace.dataset.mode = lateView ? "late" : "standard";
   standardViews.forEach((view) => {
     view.classList.toggle("is-exiting", lateView);
@@ -556,6 +582,8 @@ function navigateToRoute(nextRoute, { replace = false } = {}) {
   if (nextRoute === currentRoute) {
     return;
   }
+
+  persistDateInputsToRoute();
 
   if (routeTransitionTimer) {
     window.clearTimeout(routeTransitionTimer);
@@ -896,20 +924,11 @@ function getLateBucket(formula) {
 }
 
 function getStandardDateRange() {
-  return {
-    startDate: startDateInput.value || STANDARD_START_DATE,
-    endDate: endDateInput.value || STANDARD_END_DATE,
-  };
+  return { ...dateRangesByRoute.standard };
 }
 
 function getLateDateRange() {
-  const startDate = startDateInput.value;
-  const endDate = endDateInput.value;
-
-  return {
-    startDate: startDate && startDate !== STANDARD_START_DATE ? startDate : LATE_START_DATE,
-    endDate: endDate && endDate !== STANDARD_END_DATE ? endDate : LATE_END_DATE,
-  };
+  return { ...dateRangesByRoute.late };
 }
 
 function isLateByMarkedTime(formula) {
@@ -1140,16 +1159,19 @@ filtersForm.addEventListener("submit", (event) => {
     expandedColumns[status] = false;
   });
   normalizeDateRangeInputs();
+  persistDateInputsToRoute();
   loadRealData();
 });
 
 startDateInput.addEventListener("change", () => {
   normalizeDateRangeInputs();
+  persistDateInputsToRoute();
   loadRealData();
 });
 
 endDateInput.addEventListener("change", () => {
   normalizeDateRangeInputs();
+  persistDateInputsToRoute();
   loadRealData();
 });
 
