@@ -27,6 +27,7 @@ const dateRangesByRoute = {
   },
 };
 const LATE_REFRESH_INTERVAL_MS = 60_000;
+const LATE_ROUTE_ZOOM = "95%";
 const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const FILIAL_LABELS = {
   1: "Constança Valadares",
@@ -553,6 +554,7 @@ function isLateRoute(route = currentRoute) {
 function syncRouteUi() {
   const lateView = isLateRoute();
   syncDateInputsToRoute();
+  document.body.style.zoom = lateView ? LATE_ROUTE_ZOOM : "";
   workspace.dataset.mode = lateView ? "late" : "standard";
   standardViews.forEach((view) => {
     view.classList.toggle("is-exiting", lateView);
