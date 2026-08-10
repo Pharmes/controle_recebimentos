@@ -58,6 +58,7 @@ WHERE 1=1
             AND prd.cdfil = v.cdfil
             AND prd.cdetapa IN ('08','10')
             AND prd.cdopera NOT IN ('04')
+)
 `.trim();
 
 export function buildRecebimentoErpQuery(
