@@ -141,15 +141,6 @@ app.innerHTML = `
           </label>
 
           <label class="field">
-            <span>Etapa</span>
-            <select id="stageSelect" name="stage">
-              <option value="all" selected>Todos</option>
-              <option value="08">08 - Logística</option>
-              <option value="10">10 - Balcão</option>
-            </select>
-          </label>
-
-          <label class="field">
             <span>Requisição</span>
             <input id="requestSearch" type="search" name="request" placeholder="Ex.: 12-22091-1" autocomplete="off" />
           </label>
@@ -381,10 +372,6 @@ app.innerHTML = `
           <span class="formula-value formula-destination"></span>
         </div>
         <div class="formula-row">
-          <span class="formula-key">Etapa</span>
-          <span class="formula-value formula-stage"></span>
-        </div>
-        <div class="formula-row">
           <span class="formula-key">Operação</span>
           <span class="formula-value formula-operation"></span>
         </div>
@@ -487,7 +474,6 @@ const workspace = document.querySelector(".workspace");
 const filtersPanel = document.querySelector("#filtersPanel");
 const filtersForm = document.querySelector("#filtersForm");
 const branchSelect = document.querySelector("#branchSelect");
-const stageSelect = document.querySelector("#stageSelect");
 const requestSearch = document.querySelector("#requestSearch");
 const exportButton = document.querySelector("#exportButton");
 const systemIcon = document.querySelector(".system-icon");
@@ -736,7 +722,6 @@ function renderCard(formula, { hideStatusChip = false, forceAlertIcon = false } 
   node.querySelector(".formula-withdrawal-time").textContent = formula.hrret || "--:--";
   node.querySelector(".formula-origin").textContent = formatBranch("Origem", formula.cdfil);
   node.querySelector(".formula-destination").textContent = formatBranch("Destino", formula.cdfild);
-  node.querySelector(".formula-stage").textContent = formula.stepLabel;
   node.querySelector(".formula-operation").textContent = formula.operationLabel;
 
   if (hideStatusChip) {
@@ -776,7 +761,6 @@ function renderEmptyState(column, status) {
 }
 
 function render() {
-  syncStageOptions();
   const filteredFormulas = getFilteredFormulas();
   const filteredLateFormulas = getFilteredLateFormulas();
 
@@ -889,15 +873,13 @@ function getLateVolumeState(total) {
 }
 
 function getFilteredFormulas() {
-  const stage = stageSelect.value;
   const requestQuery = normalizeSearch(requestSearch.value);
 
   return formulas.filter((formula) => {
-    const matchesStage = stage === "all" || formula.cdetapa === stage;
     const matchesRequest =
       requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery);
 
-    return matchesStage && matchesRequest;
+    return matchesRequest;
   });
 }
 
@@ -947,16 +929,14 @@ function getRenderStatus(formula) {
   return formula.status;
 }
 
-function getAvailableFormulas({ ignoreStage = false } = {}) {
-  const stage = ignoreStage ? "all" : stageSelect.value;
+function getAvailableFormulas() {
   const requestQuery = normalizeSearch(requestSearch.value);
 
   return formulas.filter((formula) => {
-    const matchesStage = stage === "all" || formula.cdetapa === stage;
     const matchesRequest =
       requestQuery === "" || normalizeSearch(formula.request).includes(requestQuery);
 
-    return matchesStage && matchesRequest;
+    return matchesRequest;
   });
 }
 
@@ -1005,34 +985,6 @@ function isWithinDateRange(dateValue, startDate, endDate) {
   }
 
   return dateValue >= startDate && dateValue <= endDate;
-}
-
-function syncStageOptions() {
-  const stageSource = getAvailableFormulas({ ignoreStage: true });
-  const availableStages = new Set(stageSource.map((formula) => formula.cdetapa));
-  const currentValue = stageSelect.value || "all";
-
-  const stageOptions = [
-    `<option value="all"${currentValue === "all" ? " selected" : ""}>Todos</option>`,
-    `<option value="08"${currentValue === "08" ? " selected" : ""}>08 - Logística</option>`,
-    `<option value="10"${currentValue === "10" ? " selected" : ""}>10 - Balcão</option>`,
-  ].filter((option) => {
-    if (option.includes('value="all"')) {
-      return true;
-    }
-    if (option.includes('value="08"')) {
-      return availableStages.has("08");
-    }
-    if (option.includes('value="10"')) {
-      return availableStages.has("10");
-    }
-    return true;
-  });
-
-  stageSelect.innerHTML = stageOptions.join("");
-  if (![...stageSelect.options].some((option) => option.value === currentValue)) {
-    stageSelect.value = "all";
-  }
 }
 
 function syncLateToggleUi() {
@@ -1100,7 +1052,6 @@ function buildExportCsv(rows) {
     ["Hora entrada", (formula) => formula.hrcad || ""],
     ["Data retirada", (formula) => formatDisplayDate(formula.dtret)],
     ["Hora retirada", (formula) => formula.hrret || ""],
-    ["Etapa", (formula) => formula.stepLabel],
     ["Operação", (formula) => formula.operationLabel],
   ];
   const header = columns.map(([label]) => escapeCsvCell(label)).join(";");
@@ -1179,13 +1130,6 @@ endDateInput.addEventListener("change", () => {
 
 branchSelect.addEventListener("change", () => {
   loadRealData();
-});
-
-stageSelect.addEventListener("input", () => {
-  render();
-});
-stageSelect.addEventListener("change", () => {
-  render();
 });
 
 requestSearch.addEventListener("input", () => {
